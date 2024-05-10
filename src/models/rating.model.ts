@@ -4,6 +4,7 @@ import mongoose, {Schema, Document} from "mongoose";
 export interface Rating extends Document {
     user: User;
     sender: User;
+    comment: string;
     rating: number;
 };
 
@@ -11,6 +12,7 @@ export const RatingSchema : Schema<Rating> = new Schema(
     {
         user: UserSchema,
         sender: UserSchema,
+        comment: String,
         rating: {
             type: Number,
             require: true,

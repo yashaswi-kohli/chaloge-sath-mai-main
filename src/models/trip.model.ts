@@ -9,8 +9,8 @@ export interface Trip extends Document {
     departureTime: string;
     reachingTime: string;
     price: number;
-    seats: number;
-    seatLocation: string;
+    seats: [number];
+    acceptBooking: boolean;
     confirmBooking: boolean;
 };
 
@@ -41,13 +41,10 @@ export const TripSchema : Schema<Trip> = new Schema(
             type: Number,
             required: true,
         },
-        seats: {
-            type: Number,
-            required: true,
-        },
-        seatLocation: {
-            type: String,
-            required: true,
+        seats: [Number],
+        acceptBooking: {
+            type: Boolean,
+            default: true,
         },
         confirmBooking: {
             type: Boolean,
