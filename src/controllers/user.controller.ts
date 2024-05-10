@@ -4,7 +4,7 @@ import { ApiError } from "../utils/ApiError.ts";
 import { ApiResponse } from "../utils/ApiResponse.ts";
 import { asyncHandler } from "../utils/AsyncHandler.ts";
 import UserModel, { User } from "../models/user.model.ts";
-import { uploadOnCloudinary } from "../utils/cloudinary.ts";
+import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary.ts";
 
 export interface AuthenticatedRequest extends Request {
     user?: User;
@@ -159,9 +159,83 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
     }
 });
 
-export const updateUser = asyncHandler(async (req: Request, res: Response) => {});
+export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { firstName, lastName, birthdate, phoneNumber, email } = req.body;
+    if(!firstName || !lastName || !birthdate || !phoneNumber || !email ) 
+        throw new ApiError(400, "All fields are required");
 
-export const updateUserAvatar = asyncHandler(async (req: Request, res: Response) => {});
+    let isNumberVerified = true, isEmailVerified = true;
+    if(email) isEmailVerified = false;
+    if(phoneNumber) isNumberVerified = false;
+
+    try {
+        const user = await UserModel.findByIdAndUpdate(
+            req.user?._id,
+            {
+                $set: {
+                    firstName,
+                    lastName,
+                    birthdate,
+                    phoneNumber,
+                    email,
+                    isEmailVerified,
+                    isNumberVerified,
+                },
+            },
+            {
+                new: true,
+            }
+        ).select("-password -refreshToken");
+
+        if(!user) throw new ApiError(404, "User not found");
+    
+        return res
+            .status(200)
+            .json(new ApiResponse(201, user, "Account detailed updated successfully"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while updating account details"
+        );
+    }
+});
+
+export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+
+    try {
+        
+        const user = await UserModel.findById(req.user?._id);
+        if(!user) throw new ApiError(404, "User Not Found");
+
+
+        const oldAvaterUrl = user.avatar;
+        if (oldAvaterUrl) {
+            const publicId = await extractPublicId(oldAvaterUrl);
+            const response = await deleteFromCloudinary(publicId);
+        }
+
+        const avatarFile = (
+            req.files as { [filedname: string]: Express.Multer.File[] }
+        )?.avatar;
+
+        const avatarLocalPath = avatarFile && avatarFile[0].path;
+        if (!avatarLocalPath) throw new ApiError(400, "Avatar file is missing...");
+
+        const avatar = await uploadOnCloudinary(avatarLocalPath);
+        const updatedUser = await UserModel.findByIdAndUpdate()
+    
+        return res
+            .status(200)
+            .json(new ApiResponse(201, updatedUser, "Avatar Successfully Updated"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while updating avatar"
+        );
+    }
+});
 
 export const verifyUserEmail = asyncHandler(async (req: Request, res: Response) => {});
 

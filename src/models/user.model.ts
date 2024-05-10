@@ -2,31 +2,14 @@ import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken";
 import mongoose, {Schema, Document} from "mongoose";
 import { Rating, RatingSchema } from "./rating.model.js";
-
-export interface ProfileImage extends Document {
-    url: string,
-    public_id: String,
-};
-
-export const ProfileImageSchema : Schema<ProfileImage> = new Schema(
-    {
-        url: {
-            type: String,
-            required: true,
-        },
-        public_id: {
-            type: String,
-            required: true,
-        }
-    }
-);
 export interface User extends Document {
     firstName: string;
     lastName: string;
     birthdate: string;
     email: string;
     phoneNumber: string;
-    image: ProfileImage;
+    avatar: string;
+    public_id: string;
     password: string;
     about: string;
     ratings: Rating[];
@@ -55,7 +38,14 @@ export const UserSchema : Schema<User> = new Schema(
             type: String,
             required: true,
         },
-        image: ProfileImageSchema,
+        avatar: {
+            type: String,
+            required: true,
+        },
+        public_id: {
+            type: String,
+            required: false,
+        },
         birthdate: {
             type: String,
             required: true,

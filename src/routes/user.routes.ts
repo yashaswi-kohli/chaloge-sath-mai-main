@@ -5,7 +5,7 @@ import { verifyJwtToken } from "../middlewares/auth.middlewares.ts";
 
 const router = Router();
 
-router.route("/regester").post(
+router.route("/register").post(
     upload.fields([
       {
         name: "avatar",

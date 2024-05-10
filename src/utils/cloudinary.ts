@@ -26,7 +26,7 @@ const uploadOnCloudinary = async (localFilePath: string) :Promise<UploadApiRespo
 	}
 };
 
-const extractPublicIdFromUrl = async (imageUrl: string): Promise<string> => {
+const extractPublicId = async (imageUrl: string): Promise<string> => {
   const parts = imageUrl.split("/");
   const publicIdWithFormat = parts[parts.length - 1];
   const publicId = publicIdWithFormat.split(".")[0];
@@ -49,4 +49,4 @@ const deleteFromCloudinary = async (publicId: string): Promise<any> => {
   	}
 };
 
-export { uploadOnCloudinary, deleteFromCloudinary, extractPublicIdFromUrl };
+export { uploadOnCloudinary, deleteFromCloudinary, extractPublicId };
