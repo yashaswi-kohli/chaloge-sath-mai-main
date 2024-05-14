@@ -248,6 +248,20 @@ export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, r
     }
 });
 
+export const getCurrentUser = asyncHandler( async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        return res
+          .status(200)
+          .json(new ApiResponse(200, req.user, "current user fetched successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+          500,
+          error?.message || "something went wrong while getting current user"
+        );
+    }
+});
+
 export const sendCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
         const userId = req.user?._id;
@@ -318,16 +332,48 @@ export const verifyCodeForEmail = asyncHandler(async (req: AuthenticatedRequest,
     }
 });
 
+// TODO
 export const sendCodeForNumber = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
 
 });
 
 export const verifyCodeForNumber = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { verificationCode } = req.body;
+    if (!verificationCode) throw new ApiError(400, "Verification code is required");
 
-});
+    try {
+        const userId = req.user?._id;
+        if (!userId) throw new ApiError(400, "User ID not found in request");
 
-export const getUserProfile = asyncHandler(async (req: Request, res: Response) => {
+        const user = await UserModel.findById(userId);
+        if (!user) throw new ApiError(404, "User does not found");
 
+        if(user.verirfyNumberToken === verificationCode) {
+
+            if(timeDiff(user.verirfyNumberTokenExpiry)) {
+                user.isNumberVerified = true;
+                user.verirfyNumberToken = "";
+                user.verirfyNumberTokenExpiry = 0;
+                await user.save({ validateBeforeSave: true });
+            }
+            else {
+                throw new ApiError(404, "The given time is over");
+            }
+        }
+        else {
+            throw new ApiError(404, "Verification code is wrong");
+        }
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Phone number is verified successfully"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while verifying phone number"
+        );
+    }
 });
 
 export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
