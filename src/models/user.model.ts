@@ -1,7 +1,8 @@
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken";
+import {Trip, TripSchema} from "./trip.model.ts"
 import mongoose, {Schema, Document} from "mongoose";
-import { Rating, RatingSchema } from "./rating.model.js";
+
 export interface User extends Document {
     firstName: string;
     lastName: string;
@@ -12,17 +13,19 @@ export interface User extends Document {
     public_id: string;
     password: string;
     about: string;
-    ratings: Rating[];
+    nRating: number;
+    ratingS: number;
     prefrence: number[];
     refreshToken: string;
+    tripsHistory: Trip[];
     isEmailVerified: boolean;
     isNumberVerified: boolean;
     verirfyEmailToken: string;
-    verirfyEmailTokenExpiry: Date;
+    verirfyEmailTokenExpiry: number;
     verirfyNumberToken: string;
-    verirfyNumberTokenExpiry: Date;
+    verirfyNumberTokenExpiry: number;
     forgetPasswordToken: string;
-    forgetPasswordTokenExpiry: Date;
+    forgetPasswordTokenExpiry: number;
     isPasswordCorrect(password: string): Promise<boolean>;
     generateAccessToken(): string;
     generateRefreshToken(): string;
@@ -67,28 +70,30 @@ export const UserSchema : Schema<User> = new Schema(
             type: String,
             required: [true, "Password is require"],
         },
-        about: {
-            type: String,
+        ratingS: {
+            type: Number,
+            default: 0,
         },
+        nRating: {
+            type: Number,
+            default: 0,
+        },
+        about: String,
         prefrence: [Number],
-        ratings: [
-            RatingSchema,
-        ],
-        isEmailVerified: {
-            type: Boolean,
-        },
-        isNumberVerified: {
-            type: Boolean,
-        },
-        refreshToken: {
-            type: String,
-        },
+        tripsHistory: [TripSchema],
+
+        refreshToken: String,
+        isEmailVerified: Boolean,
+        isNumberVerified: Boolean,
+
         verirfyEmailToken: String,
-        verirfyEmailTokenExpiry: Date,
+        verirfyEmailTokenExpiry: Number,
+
         verirfyNumberToken: String,
-        verirfyNumberTokenExpiry: Date,
+        verirfyNumberTokenExpiry: Number,
+        
         forgetPasswordToken: String,
-        forgetPasswordTokenExpiry: Date,
+        forgetPasswordTokenExpiry: Number,
     }, { timestamps: true }
 );
 

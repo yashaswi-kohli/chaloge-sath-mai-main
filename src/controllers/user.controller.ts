@@ -4,7 +4,16 @@ import { ApiError } from "../utils/ApiError.ts";
 import { ApiResponse } from "../utils/ApiResponse.ts";
 import { asyncHandler } from "../utils/AsyncHandler.ts";
 import UserModel, { User } from "../models/user.model.ts";
+import { sendForgetPassword } from "../utils/sendForgetPassword.ts";
+import { sendVerificationEmail } from "../utils/sendVerificationEmail.ts";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary.ts";
+
+function timeDiff(start: number) : boolean {
+    const end = new Date().valueOf();
+    const diff : number = ((end - start) / 1000);
+    const seconds = Math.round(diff);
+    return seconds <= 300;
+}
 
 export interface AuthenticatedRequest extends Request {
     user?: User;
@@ -160,8 +169,8 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { firstName, lastName, birthdate, phoneNumber, email } = req.body;
-    if(!firstName || !lastName || !birthdate || !phoneNumber || !email ) 
+    const { firstName, lastName, birthdate, phoneNumber, email, about, prefrence } = req.body;
+    if(!firstName || !lastName || !birthdate || !phoneNumber || !email || !about || !prefrence) 
         throw new ApiError(400, "All fields are required");
 
     let isNumberVerified = true, isEmailVerified = true;
@@ -178,6 +187,8 @@ export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
                     birthdate,
                     phoneNumber,
                     email,
+                    about,
+                    prefrence,
                     isEmailVerified,
                     isNumberVerified,
                 },
@@ -237,12 +248,178 @@ export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, r
     }
 });
 
-export const verifyUserEmail = asyncHandler(async (req: Request, res: Response) => {});
+export const sendCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?._id;
+        if (!userId) throw new ApiError(400, "User ID not found in request");
+    
+        const user = await UserModel.findById(userId);
+        if (!user) throw new ApiError(404, "User not found");
+    
+        const email = user.email;
+        const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+        user.verirfyEmailToken = verifyCode;
+    
+        const result = await sendVerificationEmail(user.email, user.firstName, verifyCode);
+        if(!result) throw new ApiError(400, "Error while sending the verification code to email");
+        
+        let time = new Date().valueOf();    
+        user.verirfyEmailTokenExpiry = time;
+    
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
+    }
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong sending verifying code to email"
+        );
+    }
+});
 
-export const verifyUserNumber = asyncHandler(async (req: Request, res: Response) => {});
+export const verifyCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { verificationCode } = req.body;
+    if (!verificationCode) throw new ApiError(400, "Verification code is required");
 
-export const getUserProfile = asyncHandler(async (req: Request, res: Response) => {});
+    try {
+        const userId = req.user?._id;
+        if (!userId) throw new ApiError(400, "User ID not found in request");
 
-export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {});
+        const user = await UserModel.findById(userId);
+        if (!user) throw new ApiError(404, "User does not found");
 
-export const changePassword = asyncHandler(async (req: Request, res: Response) => {});
+        if(user.verirfyEmailToken === verificationCode) {
+
+            if(timeDiff(user.verirfyEmailTokenExpiry)) {
+                user.isEmailVerified = true;
+                user.verirfyEmailToken = "";
+                user.verirfyEmailTokenExpiry = 0;
+                await user.save({ validateBeforeSave: true });
+            }
+            else {
+                throw new ApiError(404, "The given time is over");
+            }
+        }
+        else {
+            throw new ApiError(404, "Verification code is wrong");
+        }
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Email verified successfully"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while verifying email"
+        );
+    }
+});
+
+export const sendCodeForNumber = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+
+});
+
+export const verifyCodeForNumber = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+
+});
+
+export const getUserProfile = asyncHandler(async (req: Request, res: Response) => {
+
+});
+
+export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
+    
+    const email = req.body;
+    if (!email) throw new ApiError(400, "email not found");
+    
+    try {
+        const user = await UserModel.findOne(email);
+        if (!user) throw new ApiError(404, "User not found by this email");
+    
+        const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+        let time = new Date().valueOf();
+        user.forgetPasswordToken = verifyCode;
+    
+        const result = await sendForgetPassword(email, verifyCode);
+        if(!result) throw new ApiError(400, "Error while sending the code for password");
+    
+        user.forgetPasswordTokenExpiry = time;
+    
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
+    }
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong sending verifying code to email"
+        );
+    }
+});
+
+export const verifyCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
+    const { email, verificationCode, password } = req.body;
+
+    if(!email || !verificationCode || !password) 
+            throw new ApiError(400, "All fields are required");
+
+    try {
+
+        const user = await UserModel.findOne(email);
+        if (!user) throw new ApiError(404, "User does not found with this email.");
+
+        if(user.forgetPasswordToken === verificationCode) 
+        {
+            if(timeDiff(user.forgetPasswordTokenExpiry)) {
+                user.password = password;
+                user.forgetPasswordToken = "";
+                user.forgetPasswordTokenExpiry = 0;
+                await user.save({ validateBeforeSave: true });
+            }
+            else {
+                throw new ApiError(404, "The given time is over for verification code.");
+            }
+        }
+        else {
+            throw new ApiError(404, "Verification code is wrong");
+        }
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Email verified successfully"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while verifying email"
+        );
+    }
+});
+
+export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { oldPassword, newPassword } = req.body;
+    try {
+      const user = await UserModel.findById(req.user?._id);
+      if (!user) throw new ApiError(404, "User does not exist");
+
+      const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+      if (!isPasswordCorrect) throw new ApiError(400, "Invalid old password");
+
+      user.password = newPassword;
+      await user.save({ validateBeforeSave: false });
+
+      return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Password changed successfully"));
+    } 
+    catch (error: any) {
+      throw new ApiError(
+        500,
+        error?.message || "something went wrong while changing password"
+      );
+    }
+});

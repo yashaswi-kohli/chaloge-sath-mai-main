@@ -1,5 +1,6 @@
 import { UserSchema, User } from "./user.model.js";
 import mongoose, {Schema, Document} from "mongoose";
+import { RatingSchema, Rating } from "./rating.model.js";
 
 export interface Trip extends Document {
     user: User;
@@ -12,6 +13,8 @@ export interface Trip extends Document {
     seats: [number];
     acceptBooking: boolean;
     confirmBooking: boolean;
+    instantBokking: boolean;
+    Rating: Rating[];
 };
 
 export const TripSchema : Schema<Trip> = new Schema(
@@ -46,11 +49,13 @@ export const TripSchema : Schema<Trip> = new Schema(
             type: Boolean,
             default: true,
         },
+        instantBokking: {
+            type: Boolean,
+        },
         confirmBooking: {
             type: Boolean,
-            required: true,
-        }
-
+        },
+        Rating: [RatingSchema],
     }
 );
 
