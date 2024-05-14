@@ -8,6 +8,7 @@ import { sendForgetPassword } from "../utils/sendForgetPassword.ts";
 import { sendVerificationEmail } from "../utils/sendVerificationEmail.ts";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary.ts";
 
+
 function timeDiff(start: number) : boolean {
     const end = new Date().valueOf();
     const diff : number = ((end - start) / 1000);
@@ -262,6 +263,144 @@ export const getCurrentUser = asyncHandler( async (req: AuthenticatedRequest, re
     }
 });
 
+// TODO
+export const getTripsHistory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const trips = await UserModel.aggregate([
+            // {
+            //     $match: {
+            //         _id: new mongoose.Types.ObjectId(req.user?._id),
+            //     }
+            // },
+            // {
+            //     $lookup: {
+            //         from: "trips",
+            //         localField: "tripsHistory",
+            //         foreignField: "_id",
+            //         as: "tripsHistory",
+            //         pipeline: [
+            //             {
+            //                 $lookup: {
+            //                     from: "users",
+            //                     localField: "customer",
+            //                     foreignField: "_id",
+            //                     as: "customer"
+            //                 }
+            //             }
+            //         ]
+            //     }
+            // }
+        ]);
+
+        return res
+            .status(200)
+            .json(
+            new ApiResponse(
+                200,
+                trips[0].tripsHistory,
+                "successfully get user watch history"
+            )
+            );
+    } 
+    catch (error) {
+        
+    }
+});
+
+export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { oldPassword, newPassword } = req.body;
+    try {
+      const user = await UserModel.findById(req.user?._id);
+      if (!user) throw new ApiError(404, "User does not exist");
+
+      const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+      if (!isPasswordCorrect) throw new ApiError(400, "Invalid old password");
+
+      user.password = newPassword;
+      await user.save({ validateBeforeSave: false });
+
+      return res
+        .status(200)
+        .json(new ApiResponse(200, {}, "Password changed successfully"));
+    } 
+    catch (error: any) {
+      throw new ApiError(
+        500,
+        error?.message || "something went wrong while changing password"
+      );
+    }
+});
+
+export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
+    
+    const email = req.body;
+    if (!email) throw new ApiError(400, "email not found");
+    
+    try {
+        const user = await UserModel.findOne(email);
+        if (!user) throw new ApiError(404, "User not found by this email");
+    
+        const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+        let time = new Date().valueOf();
+        user.forgetPasswordToken = verifyCode;
+    
+        const result = await sendForgetPassword(email, verifyCode);
+        if(!result) throw new ApiError(400, "Error while sending the code for password");
+    
+        user.forgetPasswordTokenExpiry = time;
+    
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
+    }
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong sending verifying code to email"
+        );
+    }
+});
+
+export const verifyCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
+    const { email, verificationCode, password } = req.body;
+
+    if(!email || !verificationCode || !password) 
+            throw new ApiError(400, "All fields are required");
+
+    try {
+
+        const user = await UserModel.findOne(email);
+        if (!user) throw new ApiError(404, "User does not found with this email.");
+
+        if(user.forgetPasswordToken === verificationCode) 
+        {
+            if(timeDiff(user.forgetPasswordTokenExpiry)) {
+                user.password = password;
+                user.forgetPasswordToken = "";
+                user.forgetPasswordTokenExpiry = 0;
+                await user.save({ validateBeforeSave: true });
+            }
+            else {
+                throw new ApiError(404, "The given time is over for verification code.");
+            }
+        }
+        else {
+            throw new ApiError(404, "Verification code is wrong");
+        }
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, {}, "Email verified successfully"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while verifying email"
+        );
+    }
+});
+
 export const sendCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
         const userId = req.user?._id;
@@ -373,99 +512,5 @@ export const verifyCodeForNumber = asyncHandler(async (req: AuthenticatedRequest
             500,
             error?.message || "something went wrong while verifying phone number"
         );
-    }
-});
-
-export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
-    
-    const email = req.body;
-    if (!email) throw new ApiError(400, "email not found");
-    
-    try {
-        const user = await UserModel.findOne(email);
-        if (!user) throw new ApiError(404, "User not found by this email");
-    
-        const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
-        let time = new Date().valueOf();
-        user.forgetPasswordToken = verifyCode;
-    
-        const result = await sendForgetPassword(email, verifyCode);
-        if(!result) throw new ApiError(400, "Error while sending the code for password");
-    
-        user.forgetPasswordTokenExpiry = time;
-    
-        return res
-            .status(200)
-            .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
-    }
-    catch (error) {
-        throw new ApiError(
-            500,
-            error?.message || "something went wrong sending verifying code to email"
-        );
-    }
-});
-
-export const verifyCodeForForgetPassword = asyncHandler(async (req: Request, res: Response) => {
-    const { email, verificationCode, password } = req.body;
-
-    if(!email || !verificationCode || !password) 
-            throw new ApiError(400, "All fields are required");
-
-    try {
-
-        const user = await UserModel.findOne(email);
-        if (!user) throw new ApiError(404, "User does not found with this email.");
-
-        if(user.forgetPasswordToken === verificationCode) 
-        {
-            if(timeDiff(user.forgetPasswordTokenExpiry)) {
-                user.password = password;
-                user.forgetPasswordToken = "";
-                user.forgetPasswordTokenExpiry = 0;
-                await user.save({ validateBeforeSave: true });
-            }
-            else {
-                throw new ApiError(404, "The given time is over for verification code.");
-            }
-        }
-        else {
-            throw new ApiError(404, "Verification code is wrong");
-        }
-
-        return res
-            .status(200)
-            .json(new ApiResponse(200, {}, "Email verified successfully"));
-    } 
-    catch (error) {
-        throw new ApiError(
-            500,
-            error?.message || "something went wrong while verifying email"
-        );
-    }
-});
-
-export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { oldPassword, newPassword } = req.body;
-    try {
-      const user = await UserModel.findById(req.user?._id);
-      if (!user) throw new ApiError(404, "User does not exist");
-
-      const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
-      if (!isPasswordCorrect) throw new ApiError(400, "Invalid old password");
-
-      user.password = newPassword;
-      await user.save({ validateBeforeSave: false });
-
-      return res
-        .status(200)
-        .json(new ApiResponse(200, {}, "Password changed successfully"));
-    } 
-    catch (error: any) {
-      throw new ApiError(
-        500,
-        error?.message || "something went wrong while changing password"
-      );
     }
 });
