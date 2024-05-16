@@ -7,6 +7,7 @@ import UserModel, { User } from "../models/user.model.ts";
 import { sendForgetPassword } from "../utils/sendForgetPassword.ts";
 import { sendVerificationEmail } from "../utils/sendVerificationEmail.ts";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary.ts";
+import { getAllRatings } from "./rating.controller.ts";
 
 
 function timeDiff(start: number) : boolean {
@@ -235,7 +236,17 @@ export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, r
         if (!avatarLocalPath) throw new ApiError(400, "Avatar file is missing...");
 
         const avatar = await uploadOnCloudinary(avatarLocalPath);
-        const updatedUser = await UserModel.findByIdAndUpdate()
+        if(!avatar) throw new ApiError(400, "Avatar file is missing...");
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            req.user?._id,
+            {
+                $set: {
+                    avatar: avatar.url,
+                },
+            },
+            { new: true }
+        ).select("-password -refreshToken");
     
         return res
             .status(200)
@@ -259,6 +270,45 @@ export const getCurrentUser = asyncHandler( async (req: AuthenticatedRequest, re
         throw new ApiError(
           500,
           error?.message || "something went wrong while getting current user"
+        );
+    }
+});
+
+export const getUserById = asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    if(!userId) throw new ApiError(400, "User ID is required");
+
+    try {
+        const user = await UserModel.findById(userId).select("-password -refreshToken");
+        if(!user) throw new ApiError(404, "User not found");
+
+        const tYear = new Date().getFullYear(), tMonth = new Date().getMonth(), tDay = new Date().getDate();
+        const bYear = parseInt(user.birthdate.slice(6, 10)), bMonth = parseInt(user.birthdate.slice(3, 5)), bDay = parseInt(user.birthdate.slice(0, 2));
+
+        let age = tYear - bYear;
+        if(tMonth < bMonth || (tMonth == bMonth && tDay < bDay)) age--;
+
+        const userDetail = {
+            name: user.firstName + " " + user.lastName,
+            rating: user.ratingS,
+            age,
+            noOfRating: user.nRating,
+            emailVerified: user.isEmailVerified,
+            numberVerified: user.isNumberVerified,
+            prefrence: user.prefrence,
+            since: user['createdAt'],
+        };
+
+        if(user.about.length) userDetail["about"] = user.about;
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, userDetail, "User fetched successfully"));
+    } 
+    catch (error) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while getting user"
         );
     }
 });

@@ -1,30 +1,67 @@
 import { UserSchema, User } from "./user.model.js";
 import mongoose, {Schema, Document} from "mongoose";
+import { BookingDetails, BookingDetailSchema } from "./booking.model.js";
+
+export interface Location extends Document {
+    place: string;
+    state: string;
+    city: string;
+    district: string;
+}
+
+export const LocationSchema: Schema<Location> = new Schema({
+    place: {
+        type: String,
+        required: true,
+    },
+    city: {
+        type: String,
+        required: true,
+    },
+    district: {
+        type: String,
+        required: true,
+    },
+    state: {
+        type: String,
+        required: true,
+    },
+});
+
 
 export interface Trip extends Document {
     user: User;
-    customer: User[];
-    from: string;
-    to: string;
+    customer: BookingDetails[];
+    from: Location;
+    to: Location;
     car: string;
     departureTime: string;
     reachingTime: string;
+    date: Date;
     price: number;
-    seats: [number];
+    seats: number;
+    about: string;
     acceptBooking: boolean;
     instantBokking: boolean;
 };
 
 export const TripSchema : Schema<Trip> = new Schema(
     {
-        user: UserSchema,
-        customer: [UserSchema],
+        user: {
+            type: UserSchema,
+            required: true,
+        },
+        customer: [BookingDetailSchema],
         from: {
-            type: String,
+            type: LocationSchema,
             required: true,
         },
         to: {
-            type: String,
+            type: LocationSchema,
+            required: true,
+        },
+        date: {
+            type: Date,
             required: true,
         },
         car: {
@@ -47,9 +84,10 @@ export const TripSchema : Schema<Trip> = new Schema(
             type: Boolean,
             default: true,
         },
+        about: String,
         seats: [Number],
         instantBokking: Boolean,
-    }
+    }, { timestamps: true, }
 );
 
 const TripModel = mongoose.model<Trip> ("Trips", TripSchema);

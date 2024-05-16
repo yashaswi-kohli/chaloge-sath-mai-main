@@ -2,16 +2,16 @@ import { UserSchema, User } from "./user.model.js";
 import mongoose, {Schema, Document} from "mongoose";
 
 export interface Rating extends Document {
-    user: User;
-    sender: User;
+    driver: User;
+    customer: User;
     comment: string;
     rating: number;
 };
 
 export const RatingSchema : Schema<Rating> = new Schema(
     {
-        user: UserSchema,
-        sender: UserSchema,
+        driver: UserSchema,
+        customer: UserSchema,
         comment: String,
         rating: {
             type: Number,
