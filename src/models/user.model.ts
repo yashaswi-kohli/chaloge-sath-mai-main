@@ -1,9 +1,8 @@
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken";
-import {Trip, TripSchema} from "./trip.model.ts"
 import mongoose, {Schema, Document} from "mongoose";
 
-export interface User extends Document {
+export interface UserI extends Document {
     firstName: string;
     lastName: string;
     birthdate: string;
@@ -17,7 +16,7 @@ export interface User extends Document {
     ratingS: number;
     prefrence: number[];
     refreshToken: string;
-    tripsHistory: Trip[];
+    tripsHistory: Schema.Types.ObjectId[];
     isEmailVerified: boolean;
     isNumberVerified: boolean;
     verirfyEmailToken: string;
@@ -31,7 +30,7 @@ export interface User extends Document {
     generateRefreshToken(): string;
 };
 
-export const UserSchema : Schema<User> = new Schema(
+export const UserSchema : Schema<UserI> = new Schema(
     {
         firstName: {
             type: String,
@@ -79,8 +78,14 @@ export const UserSchema : Schema<User> = new Schema(
             default: 0,
         },
         about: String,
-        prefrence: [Number],
-        tripsHistory: [TripSchema],
+        prefrence: {
+            type: [Number],
+            default: [0, 0, 0, 0],
+        },
+        tripsHistory: [{ 
+            type: Schema.Types.ObjectId, 
+            ref: "Trip",
+        }],
 
         refreshToken: String,
         isEmailVerified: Boolean,
@@ -97,18 +102,18 @@ export const UserSchema : Schema<User> = new Schema(
     }, { timestamps: true }
 );
 
-UserSchema.pre<User>("save", async function (next) 
+UserSchema.pre<UserI>("save", async function (next) 
 {
     if (!this.isModified("password")) return next();
     this.password = await bcrypt.hash(this.password, 10);
     next();
 });
   
-UserSchema.methods.isPasswordCorrect = async function (this: User, password: string) {
+UserSchema.methods.isPasswordCorrect = async function (this: UserI, password: string) {
     return await bcrypt.compare(password, this.password);
 };
   
-UserSchema.methods.generateAccessToken = function (this: User) {
+UserSchema.methods.generateAccessToken = function (this: UserI) {
     return jwt.sign(
         {
             _id: this._id,
@@ -123,7 +128,7 @@ UserSchema.methods.generateAccessToken = function (this: User) {
     );
 };
   
-UserSchema.methods.generateRefreshToken = function (this: User) {
+UserSchema.methods.generateRefreshToken = function (this: UserI) {
     return jwt.sign(
         {
             _id: this._id,
@@ -135,6 +140,6 @@ UserSchema.methods.generateRefreshToken = function (this: User) {
     );
 };
 
-const UserModel = mongoose.model<User> ("Users", UserSchema);
+const User = mongoose.model<UserI> ("User", UserSchema);
 
-export default UserModel;
+export default User;

@@ -1,8 +1,8 @@
-import { NextFunction, Request, Response } from "express";
-import { ApiError } from "../utils/ApiError.ts";
-import { asyncHandler } from "../utils/AsyncHandler.ts";
-import UserModel, { User } from "../models/user.model.ts";
 import jwt from "jsonwebtoken";
+import { ApiError } from "../utils/ApiError";
+import { asyncHandler } from "../utils/AsyncHandler";
+import UserModel, { User } from "../models/user.model";
+import { NextFunction, Request, Response } from "express";
 
 interface AuthenticatedRequest extends Request {
   user?: User;

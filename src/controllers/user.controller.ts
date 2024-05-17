@@ -1,13 +1,13 @@
-import { OPTIONS } from "../constants.ts";
+import { OPTIONS } from "../constants";
 import {Request, Response} from "express";
-import { ApiError } from "../utils/ApiError.ts";
-import { ApiResponse } from "../utils/ApiResponse.ts";
-import { asyncHandler } from "../utils/AsyncHandler.ts";
-import UserModel, { User } from "../models/user.model.ts";
-import { sendForgetPassword } from "../utils/sendForgetPassword.ts";
-import { sendVerificationEmail } from "../utils/sendVerificationEmail.ts";
-import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary.ts";
-import { getAllRatings } from "./rating.controller.ts";
+import { ApiError } from "../utils/ApiError";
+import { ApiResponse } from "../utils/ApiResponse";
+import User, { UserI } from "../models/user.model";
+import { asyncHandler } from "../utils/AsyncHandler";
+import { sendForgetPassword } from "../email/sendForgetPassword";
+import { sendVerificationEmail } from "../email/sendVerificationEmail";
+import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary";
+import mongoose from "mongoose";
 
 
 function timeDiff(start: number) : boolean {
@@ -18,12 +18,12 @@ function timeDiff(start: number) : boolean {
 }
 
 export interface AuthenticatedRequest extends Request {
-    user?: User;
+    user?: UserI;
 }
 
 const generateAccessAndRefreshToken = async (userId: string) => {
     try {
-      const user = await UserModel.findById(userId);
+      const user = await User.findById(userId);
   
       if (!user) {
         throw new ApiError(404, "User Not found");
@@ -38,7 +38,7 @@ const generateAccessAndRefreshToken = async (userId: string) => {
   
       return { accessToken, refreshToken };
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             "Something went wrong while generating refresh and access token"
@@ -46,17 +46,21 @@ const generateAccessAndRefreshToken = async (userId: string) => {
     }
 };
 
-export const loginUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+export const loginUser = asyncHandler(async (req: Request, res: Response) => {
     const { phoneNumber, email, password } = req.body;
+    console.log(req.body);
+    // console.log("phone: ", phoneNumber, " email: ", email);
+
+    console.log("password: ", password);
 
     if (!phoneNumber && !email) 
-        throw new ApiError(400, "at least give userName or email");
+        throw new ApiError(400, "at least give phone number or email");
 
     if (!password) 
         throw new ApiError(400, "password is required");
 
     try {
-        const user = await UserModel.findOne({ $or: [{ email }, { phoneNumber }] });
+        const user = await User.findOne({ $or: [{ email }, { phoneNumber }] });
         if(!user) throw new ApiError(404, "User not found");
 
         const isPasswordValid = await user.isPasswordCorrect(password);
@@ -64,7 +68,7 @@ export const loginUser = asyncHandler(async (req: AuthenticatedRequest, res: Res
 
         const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
 
-        const loggedInUser = await UserModel.findById(user._id).select(
+        const loggedInUser = await User.findById(user._id).select(
             "-password -refreshToken"
         );
     
@@ -84,7 +88,7 @@ export const loginUser = asyncHandler(async (req: AuthenticatedRequest, res: Res
             );
         
 
-    } catch (error) {
+    } catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while login"
@@ -98,7 +102,7 @@ export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
         const userId = req.user?._id;
         if (!userId) throw new ApiError(400, "User ID not found in request");
   
-        await UserModel.findByIdAndUpdate(
+        await User.findByIdAndUpdate(
           userId,
           {
             $set: {
@@ -131,7 +135,7 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
     })) throw new ApiError(400, "All fields are required");
 
     try {
-        const existedUser = await UserModel.findOne({ $or: [{ email }, { phoneNumber }] });
+        const existedUser = await User.findOne({ $or: [{ email }, { phoneNumber }] });
         if(existedUser) throw new ApiError(409, "User already exist");
     
         const avatarImage = (req.files as { [fieldname: string]: Express.Multer.File[] })?.avatar;
@@ -142,7 +146,7 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
         if(!avatarResponse) throw new ApiError(400, "Avatar file is required!!!.");
     
     
-        const user = await UserModel.create({
+        const user = await User.create({
             firstName,
             lastName,
             email,
@@ -151,18 +155,31 @@ export const registerUser = asyncHandler(async (req: Request, res: Response) => 
             password,
             avatar: avatarResponse.url,
         });
-        const createdUser: User = await UserModel.findById(user._id).select(
-            "-password -refreshToken"
-        );
-        if(!createdUser) throw new ApiError(500, "Something went wrong while creating the user");
-    
+
+        const createdUser = await User.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(user._id),
+                }
+            },
+            {
+                $project: {
+                    firstName: 1,
+                    lastName: 1,
+                    email: 1,
+                    birthdate: 1,
+                    phoneNumber: 1,
+                    avatar: 1,
+                }
+            }
+        ]);
     
         return res
           .status(201)
           .json(new ApiResponse(200, createdUser, "User register successfully"));
     
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "Something went wrong while registering user"
@@ -180,7 +197,7 @@ export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
     if(phoneNumber) isNumberVerified = false;
 
     try {
-        const user = await UserModel.findByIdAndUpdate(
+        const user = await User.findByIdAndUpdate(
             req.user?._id,
             {
                 $set: {
@@ -206,7 +223,7 @@ export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
             .status(200)
             .json(new ApiResponse(201, user, "Account detailed updated successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while updating account details"
@@ -218,14 +235,14 @@ export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, r
 
     try {
         
-        const user = await UserModel.findById(req.user?._id);
+        const user = await User.findById(req.user?._id);
         if(!user) throw new ApiError(404, "User Not Found");
 
 
         const oldAvaterUrl = user.avatar;
         if (oldAvaterUrl) {
             const publicId = await extractPublicId(oldAvaterUrl);
-            const response = await deleteFromCloudinary(publicId);
+            await deleteFromCloudinary(publicId);
         }
 
         const avatarFile = (
@@ -238,7 +255,7 @@ export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, r
         const avatar = await uploadOnCloudinary(avatarLocalPath);
         if(!avatar) throw new ApiError(400, "Avatar file is missing...");
 
-        const updatedUser = await UserModel.findByIdAndUpdate(
+        const updatedUser = await User.findByIdAndUpdate(
             req.user?._id,
             {
                 $set: {
@@ -252,7 +269,7 @@ export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, r
             .status(200)
             .json(new ApiResponse(201, updatedUser, "Avatar Successfully Updated"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while updating avatar"
@@ -279,7 +296,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     if(!userId) throw new ApiError(400, "User ID is required");
 
     try {
-        const user = await UserModel.findById(userId).select("-password -refreshToken");
+        const user = await User.findById(userId).select("-password -refreshToken");
         if(!user) throw new ApiError(404, "User not found");
 
         const tYear = new Date().getFullYear(), tMonth = new Date().getMonth(), tDay = new Date().getDate();
@@ -288,24 +305,41 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
         let age = tYear - bYear;
         if(tMonth < bMonth || (tMonth == bMonth && tDay < bDay)) age--;
 
-        const userDetail = {
-            name: user.firstName + " " + user.lastName,
-            rating: user.ratingS,
-            age,
-            noOfRating: user.nRating,
-            emailVerified: user.isEmailVerified,
-            numberVerified: user.isNumberVerified,
-            prefrence: user.prefrence,
-            since: user['createdAt'],
-        };
+        const userDetail = await User.aggregate([
+            {
+                $project: {
+                    name: { $concat: ["$firstName", " ", "$lastName"] },
+                    rating: 1,
+                    birthday: 1,
+                    about: 1,
+                    noOfRating: 1,
+                    emailVerified: 1,
+                    numberVerified: 1,
+                    prefrence: 1,
+                    since: 1,
+                }
+            }
+        ]);
 
-        if(user.about.length) userDetail["about"] = user.about;
+        userDetail[0].birthday = age.toString();
+
+        // const userDetail : any = {
+        //     name: user.firstName + " " + user.lastName,
+        //     rating: user.ratingS,
+        //     age,
+        //     about: user.about,
+        //     noOfRating: user.nRating,
+        //     emailVerified: user.isEmailVerified,
+        //     numberVerified: user.isNumberVerified,
+        //     prefrence: user.prefrence,
+        //     since: user["createdAt"],
+        // };
 
         return res
             .status(200)
             .json(new ApiResponse(200, userDetail, "User fetched successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while getting user"
@@ -316,7 +350,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
 // TODO
 export const getTripsHistory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const trips = await UserModel.aggregate([
+        const trips = await User.aggregate([
             // {
             //     $match: {
             //         _id: new mongoose.Types.ObjectId(req.user?._id),
@@ -352,7 +386,7 @@ export const getTripsHistory = asyncHandler(async (req: AuthenticatedRequest, re
             )
             );
     } 
-    catch (error) {
+    catch (error: any) {
         
     }
 });
@@ -360,7 +394,7 @@ export const getTripsHistory = asyncHandler(async (req: AuthenticatedRequest, re
 export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { oldPassword, newPassword } = req.body;
     try {
-      const user = await UserModel.findById(req.user?._id);
+      const user = await User.findById(req.user?._id);
       if (!user) throw new ApiError(404, "User does not exist");
 
       const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
@@ -387,7 +421,7 @@ export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: 
     if (!email) throw new ApiError(400, "email not found");
     
     try {
-        const user = await UserModel.findOne(email);
+        const user = await User.findOne(email);
         if (!user) throw new ApiError(404, "User not found by this email");
     
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -404,7 +438,7 @@ export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: 
             .status(200)
             .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
     }
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong sending verifying code to email"
@@ -420,7 +454,7 @@ export const verifyCodeForForgetPassword = asyncHandler(async (req: Request, res
 
     try {
 
-        const user = await UserModel.findOne(email);
+        const user = await User.findOne(email);
         if (!user) throw new ApiError(404, "User does not found with this email.");
 
         if(user.forgetPasswordToken === verificationCode) 
@@ -443,7 +477,7 @@ export const verifyCodeForForgetPassword = asyncHandler(async (req: Request, res
             .status(200)
             .json(new ApiResponse(200, {}, "Email verified successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while verifying email"
@@ -456,7 +490,7 @@ export const sendCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, r
         const userId = req.user?._id;
         if (!userId) throw new ApiError(400, "User ID not found in request");
     
-        const user = await UserModel.findById(userId);
+        const user = await User.findById(userId);
         if (!user) throw new ApiError(404, "User not found");
     
         const email = user.email;
@@ -474,7 +508,7 @@ export const sendCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, r
             .status(200)
             .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
     }
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong sending verifying code to email"
@@ -490,7 +524,7 @@ export const verifyCodeForEmail = asyncHandler(async (req: AuthenticatedRequest,
         const userId = req.user?._id;
         if (!userId) throw new ApiError(400, "User ID not found in request");
 
-        const user = await UserModel.findById(userId);
+        const user = await User.findById(userId);
         if (!user) throw new ApiError(404, "User does not found");
 
         if(user.verirfyEmailToken === verificationCode) {
@@ -513,7 +547,7 @@ export const verifyCodeForEmail = asyncHandler(async (req: AuthenticatedRequest,
             .status(200)
             .json(new ApiResponse(200, {}, "Email verified successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while verifying email"
@@ -534,7 +568,7 @@ export const verifyCodeForNumber = asyncHandler(async (req: AuthenticatedRequest
         const userId = req.user?._id;
         if (!userId) throw new ApiError(400, "User ID not found in request");
 
-        const user = await UserModel.findById(userId);
+        const user = await User.findById(userId);
         if (!user) throw new ApiError(404, "User does not found");
 
         if(user.verirfyNumberToken === verificationCode) {
@@ -557,7 +591,7 @@ export const verifyCodeForNumber = asyncHandler(async (req: AuthenticatedRequest
             .status(200)
             .json(new ApiResponse(200, {}, "Phone number is verified successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while verifying phone number"

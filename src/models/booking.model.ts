@@ -1,35 +1,35 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { User, UserSchema } from './user.model.ts';
-import { Trip, TripSchema } from './trip.model.ts';
-import { Location, LocationSchema } from './trip.model.ts';
 
-export interface BookingDetails extends Document {
-    user: User;
-    tripId: Trip;
+export interface BookingI extends Document {
+    user: Schema.Types.ObjectId;
+    tripId: Schema.Types.ObjectId;
     noOfseat: number;
-    from: Location;
-    to: Location;
+    from: string;
+    to: string;
 }
 
-export const BookingDetailSchema: Schema<BookingDetails> = new Schema({
+export const BookingSchema: Schema<BookingI> = new Schema({
     user: {
-        type: UserSchema,
-        required: true,
+        type: Schema.Types.ObjectId,
+        ref: "User",
     },
-    tripId: TripSchema,
+    tripId: {
+        type: Schema.Types.ObjectId,
+        ref: "Trip",
+    },
     noOfseat: {
         type: Number,
         required: true,
     },
     from: {
-        type: LocationSchema,
+        type: String,
         required: true,
     },
     to: {
-        type: LocationSchema,
+        type: String,
         required: true,
     },
 });
 
-const BookingModel = mongoose.model<BookingDetails> ("Users", BookingDetailSchema);
-export default BookingModel;
+const Booking = mongoose.model<BookingI> ("Booking", BookingSchema);
+export default Booking;

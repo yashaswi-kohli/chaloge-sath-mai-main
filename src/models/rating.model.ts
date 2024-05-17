@@ -1,17 +1,22 @@
-import { UserSchema, User } from "./user.model.js";
 import mongoose, {Schema, Document} from "mongoose";
 
-export interface Rating extends Document {
-    driver: User;
-    customer: User;
+export interface RatingI extends Document {
+    driver: Schema.Types.ObjectId;
+    customer: Schema.Types.ObjectId;
     comment: string;
     rating: number;
 };
 
-export const RatingSchema : Schema<Rating> = new Schema(
+export const RatingSchema : Schema<RatingI> = new Schema(
     {
-        driver: UserSchema,
-        customer: UserSchema,
+        driver: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+        },
+        customer: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+        },
         comment: String,
         rating: {
             type: Number,
@@ -25,5 +30,5 @@ export const RatingSchema : Schema<Rating> = new Schema(
     },
 );
 
-const RatingModel = mongoose.model<Rating> ("Ratings", RatingSchema);
-export default RatingModel;
+const Rating = mongoose.model<RatingI> ("Rating", RatingSchema);
+export default Rating;

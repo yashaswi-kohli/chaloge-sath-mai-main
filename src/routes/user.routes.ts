@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { upload } from "../middlewares/multer.middleware.ts";
-import { logoutUser, registerUser } from "../controllers/user.controller.ts";
-import { verifyJwtToken } from "../middlewares/auth.middlewares.ts";
+import { upload } from "../middlewares/multer.middleware";
+import { loginUser, registerUser } from "../controllers/user.controller";
+// import { verifyJwtToken } from "../middlewares/auth.middlewares";
 
 const router = Router();
 
@@ -15,13 +15,13 @@ router.route("/register").post(
     registerUser
 );
 
-router.route("/login");
-router.route("/logout").post(verifyJwtToken, logoutUser);
-router.route("/show-user");
-router.route("/update-user");
-router.route("/update-avatar");
-router.route("/change-password");
-router.route("/forgot-password");
+router.route("/login").post(loginUser);
+// router.route("/logout").post(verifyJwtToken, logoutUser);
+// router.route("/show-user");
+// router.route("/update-user");
+// router.route("/update-avatar");
+// router.route("/change-password");
+// router.route("/forgot-password");
 
 
 

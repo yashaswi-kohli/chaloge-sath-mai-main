@@ -1,39 +1,9 @@
-import { UserSchema, User } from "./user.model.js";
 import mongoose, {Schema, Document} from "mongoose";
-import { BookingDetails, BookingDetailSchema } from "./booking.model.js";
 
-export interface Location extends Document {
-    place: string;
-    state: string;
-    city: string;
-    district: string;
-}
-
-export const LocationSchema: Schema<Location> = new Schema({
-    place: {
-        type: String,
-        required: true,
-    },
-    city: {
-        type: String,
-        required: true,
-    },
-    district: {
-        type: String,
-        required: true,
-    },
-    state: {
-        type: String,
-        required: true,
-    },
-});
-
-
-export interface Trip extends Document {
-    user: User;
-    customer: BookingDetails[];
-    from: Location;
-    to: Location;
+export interface TripI extends Document {
+    user: Schema.Types.ObjectId;
+    from: string;
+    to: string;
     car: string;
     departureTime: string;
     reachingTime: string;
@@ -45,19 +15,18 @@ export interface Trip extends Document {
     instantBokking: boolean;
 };
 
-export const TripSchema : Schema<Trip> = new Schema(
+export const TripSchema : Schema<TripI> = new Schema(
     {
         user: {
-            type: UserSchema,
-            required: true,
+            type: Schema.Types.ObjectId,
+            ref: "User",
         },
-        customer: [BookingDetailSchema],
         from: {
-            type: LocationSchema,
+            type: String,
             required: true,
         },
         to: {
-            type: LocationSchema,
+            type: String,
             required: true,
         },
         date: {
@@ -90,5 +59,5 @@ export const TripSchema : Schema<Trip> = new Schema(
     }, { timestamps: true, }
 );
 
-const TripModel = mongoose.model<Trip> ("Trips", TripSchema);
-export default TripModel;
+const Trip = mongoose.model<TripI> ("Trip", TripSchema);
+export default Trip;

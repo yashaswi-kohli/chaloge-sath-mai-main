@@ -1,21 +1,21 @@
 import mongoose from "mongoose";
 import {Request, Response} from "express";
-import UserModel, { User } from "../models/user.model.ts";
-import { ApiError } from "../utils/ApiError.ts";
-import RatingModel from "../models/rating.model.ts";
-import { ApiResponse } from "../utils/ApiResponse.ts";
-import { asyncHandler } from "../utils/AsyncHandler.ts";
+import Rating from "../models/rating.model";
+import { ApiError } from "../utils/ApiError";
+import { ApiResponse } from "../utils/ApiResponse";
+import { asyncHandler } from "../utils/AsyncHandler";
+import User, { UserI } from "../models/user.model";
 
 export interface AuthenticatedRequest extends Request {
-    user?: User;
+    user?: UserI;
 }
 
 export const getAllRatings = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
-    if(!userId) throw new ApiError(400, "User id is required");
+    if(!userId) throw new ApiError(400, "UserI id is required");
 
     try {
-        const ratings = await RatingModel.aggregate([
+        const ratings = await Rating.aggregate([
             {
                 $match: {
                     driver: new mongoose.Types.ObjectId(userId),
@@ -48,7 +48,7 @@ export const getAllRatings = asyncHandler(async (req: Request, res: Response) =>
             .json(new ApiResponse(200, ratings, "Ratings fetched successfully"));
     
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while getting all reviews for the user"
@@ -63,7 +63,7 @@ export const giveARating = asyncHandler(async (req: AuthenticatedRequest, res: R
         throw new ApiError(400, "Rating, comment and driver id are required");
     
     try {
-        const driver = await UserModel.findById(driverId);
+        const driver = await User.findById(driverId);
         if(!driver) throw new ApiError(404, "Driver not found");
 
         const newRatingStar =(((driver.nRating * driver.ratingS) + rating) / (driver.nRating + 1));
@@ -72,7 +72,7 @@ export const giveARating = asyncHandler(async (req: AuthenticatedRequest, res: R
         driver.nRating = driver.nRating + 1;
         await driver.save();
 
-        const newRating = await RatingModel.create({
+        const newRating = await Rating.create({
             driver: driverId,
             customer: req.user?._id,
             rating,
@@ -83,7 +83,7 @@ export const giveARating = asyncHandler(async (req: AuthenticatedRequest, res: R
             .status(201)
             .json(new ApiResponse(201, newRating, "Rating given successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while giving a rating"
@@ -98,10 +98,10 @@ export const updateRating = asyncHandler(async (req: Request, res: Response) => 
     if(!rating || !comment) throw new ApiError(400, "Rating and comment are required");
     
     try {
-        const oldRating = await RatingModel.findById(ratingId);
+        const oldRating = await Rating.findById(ratingId);
         if(!oldRating) throw new ApiError(404, "Rating not found");
 
-        const user = await UserModel.findById(oldRating.driver);
+        const user = await User.findById(oldRating.driver);
         if(!user) throw new ApiError(404, "Driver not found");
 
         const newRatingStar = (((user.nRating * user.ratingS) - oldRating.rating + rating) / user.nRating);
@@ -109,7 +109,7 @@ export const updateRating = asyncHandler(async (req: Request, res: Response) => 
         user.ratingS = newRatingStar;
         await user.save();
 
-        const updatedRating = await RatingModel.findByIdAndUpdate(
+        const updatedRating = await Rating.findByIdAndUpdate(
             ratingId,
             {
                 rating,
@@ -122,7 +122,7 @@ export const updateRating = asyncHandler(async (req: Request, res: Response) => 
             .status(200)
             .json(new ApiResponse(200, updatedRating, "Rating updated successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while updating the rating"
@@ -134,10 +134,10 @@ export const deleteRating = asyncHandler(async (req: Request, res: Response) => 
     const { ratingId } = req.params;
 
     try {
-        const rating = await RatingModel.findById(ratingId);
+        const rating = await Rating.findById(ratingId);
         if(!rating) throw new ApiError(404, "Rating not found");
 
-        const user = await UserModel.findById(rating.driver);
+        const user = await User.findById(rating.driver);
         if(!user) throw new ApiError(404, "Driver not found");
 
         const newRatingStar = (((user.nRating * user.ratingS) - rating.rating ) / (user.nRating - 1));
@@ -152,7 +152,7 @@ export const deleteRating = asyncHandler(async (req: Request, res: Response) => 
             .status(200)
             .json(new ApiResponse(200, {}, "Rating updated successfully"));
     } 
-    catch (error) {
+    catch (error: any) {
         throw new ApiError(
             500,
             error?.message || "something went wrong while deleting the rating"
