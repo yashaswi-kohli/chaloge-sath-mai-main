@@ -1,11 +1,10 @@
 import { OPTIONS } from "../constants";
 import {Request, Response} from "express";
 import { ApiError } from "../utils/ApiError";
+import { sendEmail } from "../email/sendEmail";
 import { ApiResponse } from "../utils/ApiResponse";
 import User, { UserI } from "../models/user.model";
 import { asyncHandler } from "../utils/AsyncHandler";
-import { sendForgetPassword } from "../email/sendForgetPassword";
-import { sendVerificationEmail } from "../email/sendVerificationEmail";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary";
 import mongoose from "mongoose";
 
@@ -46,21 +45,78 @@ const generateAccessAndRefreshToken = async (userId: string) => {
     }
 };
 
+export const registerUser = asyncHandler(async (req: Request, res: Response) => {
+
+    const { firstName, lastName, birthdate, number, email, password } = req.body;
+    if ([firstName, lastName, birthdate, number, email, password].some((field) => {
+        return (field?.trim() === "");
+    })) throw new ApiError(400, "All fields are required");
+
+    try {
+        const existedUser = await User.findOne({ $or: [{ email }, { number }] });
+        if(existedUser) throw new ApiError(409, "User already exist");
+    
+        const avatarImage = (req.files as { [fieldname: string]: Express.Multer.File[] })?.avatar;
+        const avatarLocalPath = avatarImage && avatarImage[0]?.path;
+        if(!avatarLocalPath) throw new ApiError(400, "Avatar file is required");
+    
+        const avatarResponse = await uploadOnCloudinary(avatarLocalPath);
+        if(!avatarResponse) throw new ApiError(400, "Avatar file is required!!!.");
+    
+    
+        const user = await User.create({
+            firstName,
+            lastName,
+            email,
+            birthdate,
+            number,
+            password,
+            avatar: avatarResponse.url,
+        });
+
+        const createdUser = await User.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(user._id),
+                }
+            },
+            {
+                $project: {
+                    firstName: 1,
+                    lastName: 1,
+                    email: 1,
+                    birthdate: 1,
+                    number: 1,
+                    avatar: 1,
+                }
+            }
+        ]);
+    
+        return res
+          .status(201)
+          .json(new ApiResponse(200, createdUser, "User register successfully"));
+    
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "Something went wrong while registering user"
+        );
+    }
+});
+
 export const loginUser = asyncHandler(async (req: Request, res: Response) => {
-    const { phoneNumber, email, password } = req.body;
-    console.log(req.body);
-    // console.log("phone: ", phoneNumber, " email: ", email);
 
-    console.log("password: ", password);
+    const {number, email, password} = req.body;
 
-    if (!phoneNumber && !email) 
+    if (!number && !email) 
         throw new ApiError(400, "at least give phone number or email");
 
     if (!password) 
         throw new ApiError(400, "password is required");
 
     try {
-        const user = await User.findOne({ $or: [{ email }, { phoneNumber }] });
+        const user = await User.findOne({ $or: [{ email }, { number }] });
         if(!user) throw new ApiError(404, "User not found");
 
         const isPasswordValid = await user.isPasswordCorrect(password);
@@ -127,101 +183,34 @@ export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
       }
 });
 
-export const registerUser = asyncHandler(async (req: Request, res: Response) => {
-
-    const { firstName, lastName, birthdate, phoneNumber, email, password } = req.body;
-    if ([firstName, lastName, birthdate, phoneNumber, email, password].some((field) => {
-        return (field?.trim() === "");
-    })) throw new ApiError(400, "All fields are required");
-
-    try {
-        const existedUser = await User.findOne({ $or: [{ email }, { phoneNumber }] });
-        if(existedUser) throw new ApiError(409, "User already exist");
-    
-        const avatarImage = (req.files as { [fieldname: string]: Express.Multer.File[] })?.avatar;
-        const avatarLocalPath = avatarImage && avatarImage[0]?.path;
-        if(!avatarLocalPath) throw new ApiError(400, "Avatar file is required");
-    
-        const avatarResponse = await uploadOnCloudinary(avatarLocalPath);
-        if(!avatarResponse) throw new ApiError(400, "Avatar file is required!!!.");
-    
-    
-        const user = await User.create({
-            firstName,
-            lastName,
-            email,
-            birthdate,
-            phoneNumber,
-            password,
-            avatar: avatarResponse.url,
-        });
-
-        const createdUser = await User.aggregate([
-            {
-                $match: {
-                    _id: new mongoose.Types.ObjectId(user._id),
-                }
-            },
-            {
-                $project: {
-                    firstName: 1,
-                    lastName: 1,
-                    email: 1,
-                    birthdate: 1,
-                    phoneNumber: 1,
-                    avatar: 1,
-                }
-            }
-        ]);
-    
-        return res
-          .status(201)
-          .json(new ApiResponse(200, createdUser, "User register successfully"));
-    
-    } 
-    catch (error: any) {
-        throw new ApiError(
-            500,
-            error?.message || "Something went wrong while registering user"
-        );
-    }
-});
-
-export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { firstName, lastName, birthdate, phoneNumber, email, about, prefrence } = req.body;
-    if(!firstName || !lastName || !birthdate || !phoneNumber || !email || !about || !prefrence) 
-        throw new ApiError(400, "All fields are required");
+export const updateUserDetails = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { firstName, lastName, birthdate, number, email, about, prefrence } = req.body;
+    if(!firstName && !lastName && !birthdate && !number && !email && !about && !prefrence) 
+        throw new ApiError(400, "Send fields name which are to be updated");
 
     let isNumberVerified = true, isEmailVerified = true;
     if(email) isEmailVerified = false;
-    if(phoneNumber) isNumberVerified = false;
+    if(number) isNumberVerified = false;
 
     try {
-        const user = await User.findByIdAndUpdate(
-            req.user?._id,
-            {
-                $set: {
-                    firstName,
-                    lastName,
-                    birthdate,
-                    phoneNumber,
-                    email,
-                    about,
-                    prefrence,
-                    isEmailVerified,
-                    isNumberVerified,
-                },
-            },
-            {
-                new: true,
-            }
-        ).select("-password -refreshToken");
+        const user = await User.findById(req.user?._id);
+        if(!user) throw new ApiError(404, "User Not Found");
+        
+        if(about) user.about = about;
+        if(lastName) user.lastName = lastName;
+        if(birthdate) user.birthdate = birthdate;
+        if(prefrence) user.prefrence = prefrence;
+        if(firstName) user.firstName = firstName;
+        if(email) user.email = email, isEmailVerified = false;
+        if(number) user.number = number, isNumberVerified = false;
+        await user.save();
 
-        if(!user) throw new ApiError(404, "User not found");
+        const updatedUser = await User.findById(req.user?._id);
+        if(!updatedUser) throw new ApiError(404, "User Not Found");
     
         return res
             .status(200)
-            .json(new ApiResponse(201, user, "Account detailed updated successfully"));
+            .json(new ApiResponse(201, updatedUser, "Account detailed updated successfully"));
     } 
     catch (error: any) {
         throw new ApiError(
@@ -234,7 +223,6 @@ export const updateUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
 export const updateUserAvatar = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
 
     try {
-        
         const user = await User.findById(req.user?._id);
         if(!user) throw new ApiError(404, "User Not Found");
 
@@ -306,12 +294,16 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
         if(tMonth < bMonth || (tMonth == bMonth && tDay < bDay)) age--;
 
         const userDetail = await User.aggregate([
+            // {
+            //     _id: mongoose.
+            // },
             {
                 $project: {
                     name: { $concat: ["$firstName", " ", "$lastName"] },
                     rating: 1,
                     birthday: 1,
                     about: 1,
+                    avatar: 1,
                     noOfRating: 1,
                     emailVerified: 1,
                     numberVerified: 1,
@@ -322,18 +314,6 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
         ]);
 
         userDetail[0].birthday = age.toString();
-
-        // const userDetail : any = {
-        //     name: user.firstName + " " + user.lastName,
-        //     rating: user.ratingS,
-        //     age,
-        //     about: user.about,
-        //     noOfRating: user.nRating,
-        //     emailVerified: user.isEmailVerified,
-        //     numberVerified: user.isNumberVerified,
-        //     prefrence: user.prefrence,
-        //     since: user["createdAt"],
-        // };
 
         return res
             .status(200)
@@ -419,29 +399,33 @@ export const sendCodeForForgetPassword = asyncHandler(async (req: Request, res: 
     
     const email = req.body;
     if (!email) throw new ApiError(400, "email not found");
+
+    console.log(email);
     
     try {
         const user = await User.findOne(email);
         if (!user) throw new ApiError(404, "User not found by this email");
     
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+        console.log("verify-code is: ", verifyCode);
+    
+        const result = await sendEmail(email.email, user.firstName, verifyCode, "Forget Password");
+        if(result.statusCode < 369) 
+            throw new ApiError(400, "Error while sending the code for password");
     
         let time = new Date().valueOf();
-        user.forgetPasswordToken = verifyCode;
-    
-        const result = await sendForgetPassword(email, verifyCode);
-        if(!result) throw new ApiError(400, "Error while sending the code for password");
-    
         user.forgetPasswordTokenExpiry = time;
+        user.forgetPasswordToken = verifyCode;
+        await user.save({validateBeforeSave: false});
     
         return res
             .status(200)
-            .json(new ApiResponse(200, {}, "Email verification code sent successfully"));
+            .json(new ApiResponse(200, {}, "Code for forget password sent successfully"));
     }
     catch (error: any) {
         throw new ApiError(
             500,
-            error?.message || "something went wrong sending verifying code to email"
+            error?.message || "something went wrong sending code to email for password"
         );
     }
 });
@@ -493,17 +477,18 @@ export const sendCodeForEmail = asyncHandler(async (req: AuthenticatedRequest, r
         const user = await User.findById(userId);
         if (!user) throw new ApiError(404, "User not found");
     
-        const email = user.email;
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const result = await sendEmail(user.email, user.firstName, verifyCode, "Email Verification");
+        if(result.statusCode < 369) 
+            throw new ApiError(400, "Error while sending the verification code to email");
     
-        user.verirfyEmailToken = verifyCode;
-    
-        const result = await sendVerificationEmail(user.email, user.firstName, verifyCode);
-        if(!result) throw new ApiError(400, "Error while sending the verification code to email");
-        
-        let time = new Date().valueOf();    
+        let time = new Date().valueOf();
         user.verirfyEmailTokenExpiry = time;
+        user.verirfyEmailToken = verifyCode;
+        await user.save({validateBeforeSave: false});
     
+
         return res
             .status(200)
             .json(new ApiResponse(200, {}, "Email verification code sent successfully"));

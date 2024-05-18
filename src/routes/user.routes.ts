@@ -1,7 +1,16 @@
 import { Router } from "express";
 import { upload } from "../middlewares/multer.middleware";
-import { loginUser, registerUser } from "../controllers/user.controller";
-// import { verifyJwtToken } from "../middlewares/auth.middlewares";
+import { verifyJwtToken } from "../middlewares/auth.middlewares";
+
+import { 
+	getCurrentUser, getTripsHistory,
+	loginUser, logoutUser, registerUser, 
+	updateUserAvatar, updateUserDetails,
+	sendCodeForEmail, verifyCodeForEmail,
+	sendCodeForNumber,verifyCodeForNumber,
+	changePassword, sendCodeForForgetPassword, verifyCodeForForgetPassword,
+	getUserById,
+} from "../controllers/user.controller";
 
 const router = Router();
 
@@ -15,14 +24,34 @@ router.route("/register").post(
     registerUser
 );
 
+router.route("/update-avatar").patch(
+	verifyJwtToken,
+    upload.fields([
+		{ 
+			name: "avatar", 
+			maxCount: 1 
+		}
+	]),
+  	updateUserAvatar
+);
+
 router.route("/login").post(loginUser);
-// router.route("/logout").post(verifyJwtToken, logoutUser);
-// router.route("/show-user");
-// router.route("/update-user");
-// router.route("/update-avatar");
-// router.route("/change-password");
-// router.route("/forgot-password");
+router.route("/logout").post(verifyJwtToken, logoutUser);
 
+router.route("/show/:userId").patch(verifyJwtToken, getUserById);
+router.route("/current-user").get(verifyJwtToken, getCurrentUser);
 
+router.route("/trip-history").get(verifyJwtToken, getTripsHistory);
+router.route("/update-user").patch(verifyJwtToken, updateUserDetails);
+
+router.route("/send-code/email").post(verifyJwtToken, sendCodeForEmail);
+router.route("/verify-code/email").post(verifyJwtToken, verifyCodeForEmail);
+
+router.route("/send-code/number").post(verifyJwtToken, sendCodeForNumber);
+router.route("/verify-code/number").post(verifyJwtToken, verifyCodeForNumber);
+
+router.route("/change-password").post(verifyJwtToken, changePassword);
+router.route("/send-code/forgot-password").post(sendCodeForForgetPassword);
+router.route("/verify-code/forgot-password").post(verifyCodeForForgetPassword);
 
 export default router;

@@ -7,7 +7,7 @@ export interface UserI extends Document {
     lastName: string;
     birthdate: string;
     email: string;
-    phoneNumber: string;
+    number: string;
     avatar: string;
     public_id: string;
     password: string;
@@ -59,7 +59,7 @@ export const UserSchema : Schema<UserI> = new Schema(
             required: true,
             match: [/.+\@.+\..+/, "Please use valid email"]
         },
-        phoneNumber: {
+        number: {
             type: String,
             unique: true,
             index: true,

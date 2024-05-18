@@ -1,11 +1,11 @@
 import jwt from "jsonwebtoken";
 import { ApiError } from "../utils/ApiError";
+import User, { UserI } from "../models/user.model";
 import { asyncHandler } from "../utils/AsyncHandler";
-import UserModel, { User } from "../models/user.model";
 import { NextFunction, Request, Response } from "express";
 
 interface AuthenticatedRequest extends Request {
-  user?: User;
+  user?: UserI;
 }
 
 export const verifyJwtToken = asyncHandler(
@@ -24,7 +24,7 @@ export const verifyJwtToken = asyncHandler(
         process.env.ACCESS_TOKEN_SECRET as string
       );
 
-      const user: User | null = await UserModel.findById(decodedToken?._id)
+      const user: UserI | null = await User.findById(decodedToken?._id)
         .select("-password -refreshToken")
         .lean()
         .exec();
