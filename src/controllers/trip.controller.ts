@@ -1,21 +1,39 @@
+import mongoose from "mongoose";
+import Trip from "../models/trip.model";
 import {Request, Response} from "express";
 import { ApiError } from "../utils/ApiError";
-import TripModel from "../models/trip.model";
+import Booking from "../models/booking.model";
+import User, { UserI } from "../models/user.model";
 import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/AsyncHandler";
-import User, { UserI } from "../models/user.model";
-// import BookingModel, { BookingDetails } from "../models/booking.model";
+import { cancelBooking } from "./booking.controller";
+
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
 }
 
+const checkOrganiserOfTrip = async (tripId: string, userId: string) => {
+    try 
+    {
+      const trip = await Trip.findById(tripId);
+      if (!trip) throw new ApiError(404, "Video does not exist");
+
+      return (trip?.user.toString() !== userId.toString());
+    } 
+    catch (error: any) {
+      throw new ApiError(500, error?.message || "Something went wrong");
+    }
+};
+
 export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const { from, to, departureTime, reachingTime, seats, car, price, instantBokking } = req.body;
+        const { from, to, departureTime, reachingTime, seats, car, price, instantBokking, date } = req.body;
+
+        console.log(date);
     
-        if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price || !instantBokking) throw new ApiError(400, "All fields are required");
+        if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price || !instantBokking || !date) throw new ApiError(400, "All fields are required");
     
-        const trip = await TripModel.create({
+        const trip = await Trip.create({
             user: req.user?._id,
             from,
             to,
@@ -24,6 +42,7 @@ export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
             seats,
             car,
             price,
+            date,
             instantBokking,
         });
         await trip.save();
@@ -40,172 +59,289 @@ export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
     }
 });
 
-// export const getATrip = asyncHandler(async (req: Request, res: Response) => {
-//     const tripId = req.params;
+export const getATrip = asyncHandler(async (req: Request, res: Response) => {
+    const { tripId } = req.params;
     
-//     try {
-//         const trip = await TripModel.findById(tripId);
-//         if(!trip) throw new ApiError(404, "Trip not found");
+    try {
+        const trip = await Trip.findById(tripId);
+        if(!trip) throw new ApiError(404, "Trip not found");
     
-//         const user = await User.findById(trip?.user);
-//         if(!user) throw new ApiError(404, "UserI not found");
+        const user = await User.findById(trip.user);
+        if(!user) throw new ApiError(404, "User not found");
     
-//         let coTravellers : any = [];
+        let coTravellers : [any];
 
-//         for(const traveller of trip.customer) {
-//             if(traveller) {
-//                 const user = await User.findById(traveller.user);
-//                 if(!user) throw new ApiError(404, "UserI not found");
-//                 const tName =  user.firstName + " " + user.lastName;
+        trip.customer.map(async (traveller: any) => 
+            {
+                const user = await User.findById(traveller.user);
+                if(!user) throw new ApiError(404, "User not found");
+                const tName =  user.firstName + " " + user.lastName;
 
-//                 coTravellers.push({
-//                     id: traveller.user,
-//                     from : traveller.from.city,
-//                     to: traveller.from.city, 
-//                     name: tName,
-//                 });
-//             }
-//         }
-    
-//         const tripData = {
-//             day: trip.date.getDay(),
-//             date: trip.date.getDate(),
-//             month: trip.date.getMonth(),
-    
-//             from: trip.from,
-//             departureTime: trip.departureTime,
-//             to: trip.to,
-//             reachingTime: trip.reachingTime,
-    
-//             price: trip.price,
-//             userId: user._id,
-//             name: user.firstName + " " + user.lastName,
-//             rating: user.ratingS,
-//             nRatings: user.nRating,
-    
-//             car: trip.car,
-//             aboutTrip: user.about,
-//             prefrence: user.prefrence,
-//             instantBooking: trip.instantBokking,
-//         }
-    
-//         if(coTravellers.length > 0) tripData['coTravellers'] = coTravellers;
-    
-//         return res
-//             .status(200)
-//             .json(new ApiResponse(200, tripData, "Trip found successfully"));
-//     } 
-//     catch (error: any) {
-//         throw new ApiError(
-//             500,
-//             error?.message || "something went wrong showing a particular ride"
-//         );
-//     }
-    
-// })
+                coTravellers.push({
+                    id: traveller.user,
+                    from : traveller.from.city,
+                    to: traveller.from.city, 
+                    name: tName,
+                });
+            }
+        );
 
+        const tripData = await Trip.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(tripId),
+                },
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "user",
+                    foreignField: "_id",
+                    as: "userInfo",
+                    pipeline: [
+                        {
+                            $project: {
+                                _id: 1,
+                                name: {
+                                    $concat: ["$firstName", " ", "$lastName"]
+                                },
+                                avatar: 1,
+                                nRating: 1,
+                                ratingS: 1,
+                                isEmailVerified: 1,
+                                isNumberVerified: 1,
+                                prefrence: 1,
+                                about: 1,
+                            }
+                        },
+                    ]
+                },      
+            },
+            {
+                $lookup: {
+                    from: "bookings",
+                    localField: "_id",
+                    foreignField: "tripId",
+                    as: "coTravellers",
+                    pipeline: [
+                        {
+                            $lookup: {
+                                from: "users",
+                                localField: "user",
+                                foreignField: "_id",
+                                as: "Details",
+                                pipeline: [
+                                    {
+                                        $project: {
+                                            _id: 1,
+                                            firstName: 1,
+                                            lastName: 1,
+                                            avatar: 1,
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                    ]
+                },
+            },
+            {
+                $project: {
+                    day: { $dayOfWeek: "$date" },
+                    date: { $dayOfMonth: "$date" },
+                    month: { $month: "$date" },
+                    from: 1,
+                    departureTime: 1,
+                    to: 1,
+                    reachingTime: 1,
+                    price: 1,
+                    userInfo: 1,
+                    car: 1,
+                    seats: 1,
+                    instantBooking: 1,
+                },
+            }
+        ]);
+    
+        return res
+            .status(200)
+            .json(new ApiResponse(200, tripData, "Trip found successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong showing a particular ride"
+        );
+    }
+    
+})
+
+//Todo      it will get all the trips related to search query
 export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
 
 });
 
-export const cancelYourTrip = asyncHandler(async (req: Request, res: Response) => {
-
-});
-
-export const cancelOthersTrip = asyncHandler(async (req: Request, res: Response) => {
-
-});
-
+//Todo      updating the trip info and sharing with the travellers
 export const updateTrip = asyncHandler(async (req: Request, res: Response) => {
     
 });
 
-// export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-//     const tripId = req.params;
 
-//     const {from, to, noOfseat} = req.body;
-//     if(!from || !to || !noOfseat) throw new ApiError(400, "All fields are required");
+//todo       Both controllers after traverlers have booked their rides, and driver want to review it
+export const showAllCustomers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { tripId } = req.params;
+    const check = await checkOrganiserOfTrip(tripId, req.user?._id);
+    if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
 
-//     try {
-//         const trip = await TripModel.findById(tripId);
-//         if(!trip) throw new ApiError(404, "Trip not found");
+    try {
+        const trip = await Trip.findById(tripId);
+        if(!trip) throw new ApiError(404, "Trip not found");
+
+        const customers = await Booking.find({ tripId: tripId });
+        if(!customers) throw new ApiError(404, "Customers not found");
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, customers, "Customers found successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong showing all customers"
+        );
+    }
+});
+
+export const getOthersBooking = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { tripId, bookingId } = req.params;
+
+    try {
+        const check = await checkOrganiserOfTrip(tripId, req.user?._id);
+        if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
+
+        const trip = await Trip.findById(tripId);
+        if(!trip) throw new ApiError(404, "Trip not found");
+
+        const booking = await Booking.findById(bookingId);
+        if(!booking) throw new ApiError(404, "Booking not found");
+
+        const user = await User.findById(booking.user);
+        if(!user) throw new ApiError(404, "User not found");
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, booking, "Booking found successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong showing a particular ride"
+        );
+    }
+});
+
+//* Booking a ride
+//todo      inform the driver about booking from message, and verify it, and after time limit, it will be auto cancelled
+export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { tripId } = req.params;
+
+    const {from, to, noOfseat} = req.body;
+    if(!from || !to || !noOfseat) throw new ApiError(400, "All fields are required");
+
+    try {
+        const trip = await Trip.findById(tripId);
+        if(!trip) throw new ApiError(404, "Trip not found");
     
-//         const seatLeft = trip.seats - noOfseat;
+        const seatLeft : Number = trip.seats - noOfseat;
     
-//         const newBooking = await BookingModel.create({
-//             user: req.user?._id,
-//             tripId: trip._id,
-//             noOfseat,
-//             from ,
-//             to,
-//         });
+        const newBooking = await Booking.create(
+            {
+                user: req.user?._id,
+                tripId: trip._id,
+                noOfseat: seatLeft,
+                from,
+                to,
+            }
+        );
+
+        if (!newBooking) throw new ApiError(500, "Booking failed");
+        trip.customer.push(newBooking._id);
+
+        const updatedTrip = await Trip.findByIdAndUpdate(
+            tripId,
+            {
+                $set: {
+                    seats: seatLeft,
+                    customer: trip.customer,
+                },
+            },
+            { new: true }
+        );
     
-//         const updatedTrip = await TripModel.findByIdAndUpdate(
-//             tripId,
-//             {
-//                 $set: {
-//                     seats: seatLeft,
-//                     customer: newBooking,
-//                 }
-//             },
-//             {new: true},
-//         );
-    
-//         return res
-//             .status(200)
-//             .json(new ApiResponse(200, updatedTrip, "Trip booked successfully"));
-//     } 
-//     catch (error: any) {
-//         throw new ApiError(
-//             500,
-//             error?.message || "something went wrong booking a trip"
-//         );
+        return res
+            .status(200)
+            .json(new ApiResponse(200, updatedTrip, "Trip booked successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong booking a trip"
+        );
         
-//     }
+    }
 
-// });
+});
 
+//*         Cancel your trip
+//todo      inform the travellers from message
+export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { tripId } = req.params;
+    try {
+        const check = await checkOrganiserOfTrip(tripId, req.user?._id)
+        if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
 
+        const trip = await Trip.findById(tripId);
+        if(!trip) throw new ApiError(404, "Trip not found");
 
-// export const cancelYourBooking = asyncHandler(async (req: Request, res: Response) => {
-//     const bookingId = req.params;
+        trip.customer.map(async (customer: any) => {
 
-//     try {
+        });
 
-//         const booking = await BookingModel.findById(bookingId);
-//         if(!booking) throw new ApiError(404, "Booking not found");
+        const deleteTrip = await Trip.findByIdAndDelete(tripId);
+        if(!deleteTrip) throw new ApiError(500, "Trip not deleted");
 
-//         const trip = await TripModel.findById(booking.tripId);
-//         if(!trip) throw new ApiError(404, "Trip not found");
-    
-//         const seatLeft = trip.seats + booking.noOfseat;
-//         const customerList = trip.customer.filter((customer: any) => customer !== booking);
-    
-//         const updatedTrip = await TripModel.findByIdAndUpdate(
-//             bookingId.tripId,
-//             {
-//                 $set: {
-//                     seats: seatLeft,
-//                     customer: customerList,
-//                 }
-//             },
-//             {new: true},
-//         );
+        return res
+            .status(200)
+            .json(new ApiResponse(200, deleteTrip, "Trip cancelled successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while cancelling a tri"
+        )
+    }
+});
 
-//         await BookingModel.findByIdAndDelete(bookingId);
+//*         Cancel your travellers booking 
+//todo      inform the travellers from message
+export const cancelOthersTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { tripId, bookingId } = req.params;
 
-//         return res
-//             .status(200)
-//             .json(new ApiResponse(200, updatedTrip, "Booking cancelled successfully"));
-//     } 
-//     catch(error: any) {
-//         throw new ApiError(
-//             500,
-//             error?.message || "something went wrong while cancelling a ride"
-//         );
-//     }
-        
+    try {
+        const check = await checkOrganiserOfTrip(tripId, req.user?._id)
+        if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
 
-    
+        const updatedTrip = await cancelBooking(tripId, bookingId, false, false);
+        if(!updatedTrip) throw new ApiError(500, "Booking not deleted");
 
-// });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, updatedTrip, "Booking cancelled successfully"));
+    }
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while cancelling a ride"
+        );
+    }
+});

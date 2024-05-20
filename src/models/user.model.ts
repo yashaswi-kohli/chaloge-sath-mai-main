@@ -5,24 +5,34 @@ import mongoose, {Schema, Document} from "mongoose";
 export interface UserI extends Document {
     firstName: string;
     lastName: string;
+
     birthdate: string;
     email: string;
     number: string;
+
     avatar: string;
     public_id: string;
+
     password: string;
     about: string;
     nRating: number;
     ratingS: number;
+
     prefrence: number[];
+    cancelledTrips: number;
+
     refreshToken: string;
-    tripsHistory: Schema.Types.ObjectId[];
+    tripsArchive: Schema.Types.ObjectId[];
+
     isEmailVerified: boolean;
     isNumberVerified: boolean;
+
     verirfyEmailToken: string;
     verirfyEmailTokenExpiry: number;
+
     verirfyNumberToken: string;
     verirfyNumberTokenExpiry: number;
+
     forgetPasswordToken: string;
     forgetPasswordTokenExpiry: number;
     isPasswordCorrect(password: string): Promise<boolean>;
@@ -77,19 +87,33 @@ export const UserSchema : Schema<UserI> = new Schema(
             type: Number,
             default: 0,
         },
-        about: String,
         prefrence: {
             type: [Number],
             default: [0, 0, 0, 0],
         },
-        tripsHistory: [{ 
-            type: Schema.Types.ObjectId, 
-            ref: "Trip",
-        }],
+        tripsArchive: [
+            {
+                type: Schema.Types.ObjectId,
+                ref: "Conclusion",
+            }
+        ],
 
+        about: String,
         refreshToken: String,
-        isEmailVerified: Boolean,
-        isNumberVerified: Boolean,
+        
+        cancelledTrips: {
+            type: Number,
+            default: 0,
+        },
+
+        isEmailVerified: {
+            type: Boolean,
+            default: false,
+        },
+        isNumberVerified: {
+            type: Boolean,
+            default: false,
+        },
 
         verirfyEmailToken: String,
         verirfyEmailTokenExpiry: Number,

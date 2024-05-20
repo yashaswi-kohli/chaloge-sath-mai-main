@@ -2,6 +2,7 @@ import mongoose, {Schema, Document} from "mongoose";
 
 export interface TripI extends Document {
     user: Schema.Types.ObjectId;
+    customer: [Schema.Types.ObjectId];
     from: string;
     to: string;
     car: string;
@@ -11,8 +12,8 @@ export interface TripI extends Document {
     price: number;
     seats: number;
     about: string;
-    acceptBooking: boolean;
-    instantBokking: boolean;
+    archive: boolean;
+    instantBooking: boolean;
 };
 
 export const TripSchema : Schema<TripI> = new Schema(
@@ -20,6 +21,10 @@ export const TripSchema : Schema<TripI> = new Schema(
         user: {
             type: Schema.Types.ObjectId,
             ref: "User",
+        },
+        customer: {
+               type: [Schema.Types.ObjectId],
+                ref: "Booking", 
         },
         from: {
             type: String,
@@ -49,13 +54,16 @@ export const TripSchema : Schema<TripI> = new Schema(
             type: Number,
             required: true,
         },
-        acceptBooking: {
+        archive: {
             type: Boolean,
-            default: true,
+            default: false,
         },
         about: String,
-        seats: [Number],
-        instantBokking: Boolean,
+        seats: {
+            type: Number,
+            required: true,
+        },
+        instantBooking: Boolean,
     }, { timestamps: true, }
 );
 

@@ -5,14 +5,19 @@ import cookieParser from "cookie-parser";
 process.loadEnvFile();
 const app : Express = express();
 
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(express.static("public"));
+app.use(express.json());
 app.use(cookieParser());
+app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+
 
 import userRouter from "./routes/user.routes";
+import tripRouter from "./routes/trip.routes";
+import ratingRouter from "./routes/rating.routes";
 
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/trips", tripRouter);
+app.use("/api/v1/ratings", ratingRouter);
 
 export default app;

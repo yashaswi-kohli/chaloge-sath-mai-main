@@ -328,7 +328,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // TODO
-export const getTripsHistory = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+export const showArchiveTrips = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
         const trips = await User.aggregate([
             // {
@@ -369,6 +369,11 @@ export const getTripsHistory = asyncHandler(async (req: AuthenticatedRequest, re
     catch (error: any) {
         
     }
+});
+
+// TODO
+export const showArchiveBookings = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+
 });
 
 export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
