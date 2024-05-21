@@ -6,9 +6,8 @@ export interface TripI extends Document {
     from: string;
     to: string;
     car: string;
-    departureTime: string;
-    reachingTime: string;
-    date: Date;
+    departureTime: Date;
+    reachingTime: Date;
     price: number;
     seats: number;
     about: string;
@@ -34,36 +33,34 @@ export const TripSchema : Schema<TripI> = new Schema(
             type: String,
             required: true,
         },
-        date: {
+        departureTime: {
             type: Date,
             required: true,
         },
-        car: {
-            type: String,
-            required: true,
-        },
-        departureTime: {
-            type: String,
-            required: true,
-        },
         reachingTime: {
-            type: String,
+            type: Date,
             required: true,
         },
         price: {
             type: Number,
             required: true,
         },
-        archive: {
-            type: Boolean,
-            default: false,
-        },
-        about: String,
         seats: {
             type: Number,
             required: true,
         },
-        instantBooking: Boolean,
+        instantBooking: {
+            type: Boolean,
+            required: true,
+        },
+        car: {
+            type: String,
+            required: true,
+        },
+        archive: {
+            type: Boolean,
+            default: false,
+        },
     }, { timestamps: true, }
 );
 

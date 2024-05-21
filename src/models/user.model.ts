@@ -19,7 +19,8 @@ export interface UserI extends Document {
     ratingS: number;
 
     prefrence: number[];
-    cancelledTrips: number;
+    cancelledRides: number;
+    ridesPublished: number;
 
     refreshToken: string;
     tripsArchive: Schema.Types.ObjectId[];
@@ -101,7 +102,11 @@ export const UserSchema : Schema<UserI> = new Schema(
         about: String,
         refreshToken: String,
         
-        cancelledTrips: {
+        cancelledRides: {
+            type: Number,
+            default: 0,
+        },
+        ridesPublished: {
             type: Number,
             default: 0,
         },

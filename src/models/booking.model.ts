@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface BookingI extends Document {
     user: Schema.Types.ObjectId;
     tripId: Schema.Types.ObjectId;
-    noOfseat: number;
+    noOfSeat: number;
     from: string;
     to: string;
 }
@@ -17,7 +17,7 @@ export const BookingSchema: Schema<BookingI> = new Schema({
         type: Schema.Types.ObjectId,
         ref: "Trip",
     },
-    noOfseat: {
+    noOfSeat: {
         type: Number,
         required: true,
     },

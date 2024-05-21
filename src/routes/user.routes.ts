@@ -3,7 +3,7 @@ import { upload } from "../middlewares/multer.middleware";
 import { verifyJwtToken } from "../middlewares/auth.middlewares";
 
 import { 
-	getCurrentUser, getTripsHistory,
+	getCurrentUser, getArchiveTrips,
 	loginUser, logoutUser, registerUser, 
 	updateUserAvatar, updateUserDetails,
 	sendCodeForEmail, verifyCodeForEmail,
@@ -41,7 +41,7 @@ router.route("/logout").post(verifyJwtToken, logoutUser);
 router.route("/show/:userId").patch(verifyJwtToken, getUserById);
 router.route("/current-user").get(verifyJwtToken, getCurrentUser);
 
-router.route("/trip-history").get(verifyJwtToken, getTripsHistory);
+router.route("/trip-history").get(verifyJwtToken, getArchiveTrips);
 router.route("/update-user").patch(verifyJwtToken, updateUserDetails);
 
 router.route("/send-code/email").post(verifyJwtToken, sendCodeForEmail);

@@ -1,34 +1,17 @@
 import { Router } from "express";
-import { upload } from "../middlewares/multer.middleware";
 import { verifyJwtToken } from "../middlewares/auth.middlewares";
-import { bookYourRide, showAllCustomers, cancelOthersTrip, cancelYourTrip, createTrip, getATrip, updateTrip, getOthersBooking } from "../controllers/trip.controller";
+import { bookYourTrip, cancelOthersTrip, cancelYourTrip, createTrip, getATrip, updateTrip } from "../controllers/trip.controller";
 
 const router = Router();
 router.use(verifyJwtToken);
 
 router.route("/publish").post(createTrip);
-
-router.route("/:tripId/travellers").get(showAllCustomers);
-router.route("/:tripId/travellers/:bookingId")
-    .get(getOthersBooking)
-    .post(cancelOthersTrip);
+router.route("/:tripId/:bookingId").post(cancelOthersTrip);
 
 router.route("/:tripId")
     .get(getATrip)
-    .post(bookYourRide)
+    .post(bookYourTrip)
     .delete(cancelYourTrip)
-    .patch(
-        upload.fields([
-        {
-            name: "thumbnailFile",
-            maxCount: 1,
-        },
-        ]),
-        updateTrip
-    )
-
-
-
-
+    .patch(updateTrip)
 
 export default router;

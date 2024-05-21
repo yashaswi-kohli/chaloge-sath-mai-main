@@ -1,18 +1,22 @@
-import mongoose from "mongoose";
+import moment from "moment";
 import Trip from "../models/trip.model";
 import {Request, Response} from "express";
 import { ApiError } from "../utils/ApiError";
 import Booking from "../models/booking.model";
 import User, { UserI } from "../models/user.model";
 import { ApiResponse } from "../utils/ApiResponse";
+import mongoose, { isValidObjectId } from "mongoose";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { cancelBooking } from "./booking.controller";
+import Conclusion from "../models/conclusion.model";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
 }
 
-const checkOrganiserOfTrip = async (tripId: string, userId: string) => {
+const checkOrganiserOfTrip = async function (tripId: string, userId: string) {
+
+    if(!userId || !isValidObjectId(userId)) throw new ApiError(400, "User id is required");
     try 
     {
       const trip = await Trip.findById(tripId);
@@ -21,36 +25,48 @@ const checkOrganiserOfTrip = async (tripId: string, userId: string) => {
       return (trip?.user.toString() !== userId.toString());
     } 
     catch (error: any) {
-      throw new ApiError(500, error?.message || "Something went wrong");
+      throw new ApiError(500, error?.message || "Something went wrong while checking the user of the trip person");
     }
 };
 
 export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    try {
-        const { from, to, departureTime, reachingTime, seats, car, price, instantBokking, date } = req.body;
 
-        console.log(date);
-    
-        if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price || !instantBokking || !date) throw new ApiError(400, "All fields are required");
-    
+    const { from, to, departureTime, reachingTime, seats, car, price, instantBooking } = req.body;
+    if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price ||!instantBooking) throw new ApiError(400, "All fields are required");
+
+    try {
+
+        const reachingT = moment(reachingTime,"YYYY-MM--DD HH:mm").toDate();
+        const departureT = moment(departureTime, "YYYY-MM-DD HH:mm").toDate();
+        
         const trip = await Trip.create({
             user: req.user?._id,
             from,
             to,
-            departureTime,
-            reachingTime,
+            departureTime: departureT,
+            reachingTime: reachingT,
             seats,
             car,
             price,
-            date,
-            instantBokking,
+            instantBooking,
         });
-        await trip.save();
+
+        const conclusion = await Conclusion.create({
+            driverId: req.user?._id,
+            tripId: trip._id,
+        });
+
+        const user = await User.findById(req.user?._id).select( "-password -refreshToken");
+        if(!user) throw new ApiError(404, "User not found");
+
+        user.tripsArchive.push(conclusion._id);
+        user.ridesPublished = user.ridesPublished + 1;
+        await user.save();
     
         return res
             .status(201)
             .json(new ApiResponse(201, trip, "Trip created successfully"));
-    } 
+    }
     catch (error: any) {
         throw new ApiError(
             500,
@@ -61,6 +77,7 @@ export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
 
 export const getATrip = asyncHandler(async (req: Request, res: Response) => {
     const { tripId } = req.params;
+    if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
     
     try {
         const trip = await Trip.findById(tripId);
@@ -85,6 +102,9 @@ export const getATrip = asyncHandler(async (req: Request, res: Response) => {
                 });
             }
         );
+
+        const rt = trip.reachingTime.getHours() + ":" + trip.reachingTime.getMinutes();
+        const dt  = trip.departureTime.getHours() + ":" + trip.departureTime.getMinutes();
 
         const tripData = await Trip.aggregate([
             {
@@ -147,13 +167,13 @@ export const getATrip = asyncHandler(async (req: Request, res: Response) => {
             },
             {
                 $project: {
-                    day: { $dayOfWeek: "$date" },
-                    date: { $dayOfMonth: "$date" },
-                    month: { $month: "$date" },
+                    day: { $dayOfWeek: "$departureTime" },
+                    date: { $dayOfMonth: "$departureTime" },
+                    month: { $month: "$departureTime" },
                     from: 1,
-                    departureTime: 1,
+                    departureTime: dt,
                     to: 1,
-                    reachingTime: 1,
+                    reachingTime: rt,
                     price: 1,
                     userInfo: 1,
                     car: 1,
@@ -186,101 +206,52 @@ export const updateTrip = asyncHandler(async (req: Request, res: Response) => {
     
 });
 
-
-//todo       Both controllers after traverlers have booked their rides, and driver want to review it
-export const showAllCustomers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { tripId } = req.params;
-    const check = await checkOrganiserOfTrip(tripId, req.user?._id);
-    if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
-
-    try {
-        const trip = await Trip.findById(tripId);
-        if(!trip) throw new ApiError(404, "Trip not found");
-
-        const customers = await Booking.find({ tripId: tripId });
-        if(!customers) throw new ApiError(404, "Customers not found");
-
-        return res
-            .status(200)
-            .json(new ApiResponse(200, customers, "Customers found successfully"));
-    } 
-    catch (error: any) {
-        throw new ApiError(
-            500,
-            error?.message || "something went wrong showing all customers"
-        );
-    }
-});
-
-export const getOthersBooking = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { tripId, bookingId } = req.params;
-
-    try {
-        const check = await checkOrganiserOfTrip(tripId, req.user?._id);
-        if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
-
-        const trip = await Trip.findById(tripId);
-        if(!trip) throw new ApiError(404, "Trip not found");
-
-        const booking = await Booking.findById(bookingId);
-        if(!booking) throw new ApiError(404, "Booking not found");
-
-        const user = await User.findById(booking.user);
-        if(!user) throw new ApiError(404, "User not found");
-
-        return res
-            .status(200)
-            .json(new ApiResponse(200, booking, "Booking found successfully"));
-    } 
-    catch (error: any) {
-        throw new ApiError(
-            500,
-            error?.message || "something went wrong showing a particular ride"
-        );
-    }
-});
-
-//* Booking a ride
+//*         Booking a ride
 //todo      inform the driver about booking from message, and verify it, and after time limit, it will be auto cancelled
 export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { tripId } = req.params;
+    if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
 
-    const {from, to, noOfseat} = req.body;
-    if(!from || !to || !noOfseat) throw new ApiError(400, "All fields are required");
+    const {from, to, noOfSeat} = req.body;
+    if(!from || !to || !noOfSeat) throw new ApiError(400, "All fields are required");
 
     try {
         const trip = await Trip.findById(tripId);
         if(!trip) throw new ApiError(404, "Trip not found");
     
-        const seatLeft : Number = trip.seats - noOfseat;
+        const seatLeft : Number = trip.seats - noOfSeat;
     
         const newBooking = await Booking.create(
             {
                 user: req.user?._id,
                 tripId: trip._id,
-                noOfseat: seatLeft,
+                noOfSeat,
                 from,
                 to,
             }
         );
 
         if (!newBooking) throw new ApiError(500, "Booking failed");
+        
+        trip.seats = seatLeft as number;
         trip.customer.push(newBooking._id);
+        await trip.save();
 
-        const updatedTrip = await Trip.findByIdAndUpdate(
-            tripId,
-            {
-                $set: {
-                    seats: seatLeft,
-                    customer: trip.customer,
-                },
-            },
-            { new: true }
-        );
-    
+
+        const user = await User.findById(req.user?._id).select( "-password -refreshToken");
+        if(!user) throw new ApiError(404, "User not found");
+
+        const conclusion = await Conclusion.create({
+            tripId: trip._id,
+            bookingId: newBooking._id,
+            travellerId: req.user?._id,
+        });
+        user.tripsArchive.push(conclusion._id);
+        await user.save();
+        
         return res
             .status(200)
-            .json(new ApiResponse(200, updatedTrip, "Trip booked successfully"));
+            .json(new ApiResponse(200, newBooking, "Trip booked successfully"));
     } 
     catch (error: any) {
         throw new ApiError(
@@ -296,6 +267,8 @@ export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: 
 //todo      inform the travellers from message
 export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { tripId } = req.params;
+    if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
+
     try {
         const check = await checkOrganiserOfTrip(tripId, req.user?._id)
         if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
@@ -304,7 +277,10 @@ export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res
         if(!trip) throw new ApiError(404, "Trip not found");
 
         trip.customer.map(async (customer: any) => {
+            const booking = await Booking.findById(customer);
+            if(!booking) throw new ApiError(404, "Booking not found");
 
+            await cancelBooking(trip, booking, true, true);
         });
 
         const deleteTrip = await Trip.findByIdAndDelete(tripId);
@@ -327,11 +303,20 @@ export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res
 export const cancelOthersTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { tripId, bookingId } = req.params;
 
+    if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
+    if(!bookingId || !isValidObjectId(bookingId)) throw new ApiError(400, "Booking id is required");
+
     try {
         const check = await checkOrganiserOfTrip(tripId, req.user?._id)
         if(!check) throw new ApiError(401, "You are not authorised to cancel this trip");
 
-        const updatedTrip = await cancelBooking(tripId, bookingId, false, false);
+        const trip = await Trip.findById(tripId);
+        if(!trip) throw new ApiError(404, "Trip not found");
+
+        const booking = await Booking.findById(bookingId);
+        if(!booking) throw new ApiError(404, "Booking not found");
+
+        const updatedTrip = await cancelBooking(trip, booking, true, false);
         if(!updatedTrip) throw new ApiError(500, "Booking not deleted");
 
         return res

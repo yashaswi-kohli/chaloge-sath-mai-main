@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 import {Request, Response} from "express";
 import Rating from "../models/rating.model";
 import { ApiError } from "../utils/ApiError";
@@ -12,7 +12,7 @@ export interface AuthenticatedRequest extends Request {
 
 export const getAllRatings = asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
-    if(!userId) throw new ApiError(400, "UserI id is required");
+    if(!userId || !isValidObjectId(userId)) throw new ApiError(400, "User id is required");
 
     try {
         const ratings = await Rating.aggregate([
@@ -58,15 +58,17 @@ export const getAllRatings = asyncHandler(async (req: Request, res: Response) =>
 
 export const giveARating = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     
-    const { rating, comment, driverId } = req.body;
-    if(!rating || !comment || !driverId) 
-        throw new ApiError(400, "Rating, comment and driver id are required");
+    const { driverId } = req.params;
+    if(!driverId || isValidObjectId(driverId)) throw new ApiError(400, "Driver id is required");
+
+    const { rating, comment } = req.body;
+    if(!rating || !comment) throw new ApiError(400, "All fields are required");
     
     try {
         const driver = await User.findById(driverId);
         if(!driver) throw new ApiError(404, "Driver not found");
 
-        const newRatingStar =(((driver.nRating * driver.ratingS) + rating) / (driver.nRating + 1));
+        const newRatingStar = (((driver.nRating * driver.ratingS) + rating) / (driver.nRating + 1));
 
         driver.ratingS = newRatingStar;
         driver.nRating = driver.nRating + 1;
@@ -94,6 +96,8 @@ export const giveARating = asyncHandler(async (req: AuthenticatedRequest, res: R
 export const updateRating = asyncHandler(async (req: Request, res: Response) => {
     
     const { ratingId } = req.params;
+    if(!ratingId || !isValidObjectId(ratingId)) throw new ApiError(400, "User id is required");
+
     const { rating, comment } = req.body;
     if(!rating || !comment) throw new ApiError(400, "Rating and comment are required");
     
@@ -132,6 +136,7 @@ export const updateRating = asyncHandler(async (req: Request, res: Response) => 
 
 export const deleteRating = asyncHandler(async (req: Request, res: Response) => {
     const { ratingId } = req.params;
+    if(!ratingId || !isValidObjectId(ratingId)) throw new ApiError(400, "User id is required");
 
     try {
         const rating = await Rating.findById(ratingId);
