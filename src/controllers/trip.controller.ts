@@ -340,19 +340,27 @@ export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res
         const trip = await Trip.findById(tripId);
         if(!trip) throw new ApiError(404, "Trip not found");
 
-        trip.customer.map(async (customer: any) => {
-            const booking = await Booking.findById(customer);
-            if(!booking) throw new ApiError(404, "Booking not found");
+        if(trip.customer.length > 0) {
+            trip.customer.map(async (customer: any) => {
+                const booking = await Booking.findById(customer);
+                if(!booking) throw new ApiError(404, "Booking not found");
+    
+                const chk = await cancelBooking(trip, booking, true, true);
+                if(!chk) throw new ApiError(500, "Booking not deleted");
+            });
+        }
+        else {
+            const driverConclusion = await Conclusion.findOne({ tripId: trip._id, driverId: trip.user });
+            if(!driverConclusion) throw new ApiError(404, "Driver conclusion not found");
 
-            await cancelBooking(trip, booking, true, true);
-        });
-
-        const deleteTrip = await Trip.findByIdAndDelete(tripId);
-        if(!deleteTrip) throw new ApiError(500, "Trip not deleted");
+            driverConclusion.archive = true;
+            driverConclusion.conclusion = "You cancelled the trip.";
+            await driverConclusion.save();
+        }
 
         return res
             .status(200)
-            .json(new ApiResponse(200, deleteTrip, "Trip cancelled successfully"));
+            .json(new ApiResponse(200, {}, "Trip cancelled successfully"));
     } 
     catch (error: any) {
         throw new ApiError(

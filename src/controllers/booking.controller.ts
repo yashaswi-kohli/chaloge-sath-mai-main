@@ -29,6 +29,8 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
 
         userConclusion.archive = true;
 
+        console.log(deleteTrip, driverCancel);
+
         if(!deleteTrip) 
         {
 
@@ -40,12 +42,14 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
 
 
                 //* updating the conclusion for the user
+                userConclusion.archive = true;
                 userConclusion.conclusion = "The driver cancelled your ride.";
                 await userConclusion.save();
 
             }
             else {
                 //* updating the conclusion for the user
+                userConclusion.archive = true;
                 userConclusion.conclusion = "You cancelled the ride.";
                 await userConclusion.save()
             }
@@ -70,6 +74,7 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
         }
         else {
             //* updating the conclusion for the user
+            userConclusion.archive = true;
             userConclusion.conclusion = "The driver cancelled the trip.";
             await userConclusion.save();
 
@@ -78,6 +83,7 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
             const driverConclusion = await Conclusion.findOne({ tripId: trip._id, driverId: trip.user });
             if(!driverConclusion) throw new ApiError(404, "Driver conclusion not found");
 
+            driverConclusion.archive = true;
             driverConclusion.conclusion = "You cancelled the trip.";
             await driverConclusion.save();
 

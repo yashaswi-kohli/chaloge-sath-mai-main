@@ -331,7 +331,6 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     }
 });
 
-// TODO
 export const getArchiveTrips = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
         const trips = await User.aggregate([
@@ -342,72 +341,196 @@ export const getArchiveTrips = asyncHandler(async (req: AuthenticatedRequest, re
             },
             {
                 $lookup: {
-                    from: "conclusion",
-                    localField: "tripsArchive",
-                    foreignField: "_id",
-                    as: "tripsArchive",
-                    pipeline: [
-                        {
-                            $match: {
-                                archive: true,
-                            }
-                        },
-                        {
-                            $lookup: {
-                                from: "trip",
-                                localField: "tripId",
-                                foreignField: "_id",
-                                as: "tripDetail",
-                                pipeline: [
-                                    {
-                                        $project: {
-                                            customer: 1,
-                                            departureTime: 1,
-                                            date: 1,
-                                            from: 1,
-                                            to: 1,
-                                            reachingTime: 1,
-                                        },
-                                    },
-                                    {
-                                        $addFields: {
-                                            $cond: {
-                                                if: { $in: [req.user?._id, "%tripDetail.customer"] },
-                                                then: {
-                                                    user: 1,
-                                                },
-                                                else: {
-                                                    user: 0,
-                                                }
-                                            }
-                                        }
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            $project: {
-                                booking: 1,
-                            }
-                        }
-                    ]
-                }
-            },
-            {
-                $sort: {
-                    "tripsArchive.date": -1,
+                  from: "conclusions",
+                  localField: "tripsArchive",
+                  foreignField: "_id",
+                  as: "result",
+                  pipeline: [
+                    {
+                      $project: {
+                        date: 1,
+                        tripId: 1,
+                        conclusion: 1,
+                        bookingId: 1,
+                        archive: 1,
+                      }
+                    }
+                  ]
                 }
             },
             {
                 $project: {
-                    trip: 1,
-                    booking: 1,
-                    traveller: 1,
-                    conclusion: 1,
-                    date: 1,
+                  result: 1,
+                }
+            },
+            {
+                $unwind: {
+                  path: "$result"
+                }
+            },
+            {
+                $project: {
+                    conclusionId: "$result._id",
+                    conclusionOfTrip: "$result.conclusion",
+                    tripId: "$result.tripId",
+                    bookingId: "$result.bookingId" ,
+                    date: "$result.date",
+                    archive: "$result.archive"
+                }
+            },
+            {
+                $match: {
+                  archive: true
+                }
+            },
+            {
+                $sort: {
+                  date: 1
+                }
+            },
+            {
+                $lookup: {
+                  from: "trips",
+                  localField: "tripId",
+                  foreignField: "_id",
+                  as: "allTripsArchive",
+                  pipeline: [
+                    {
+                      $project: {
+                        to: 1,
+                        from: 1,
+                        departureTime: 1,
+                        reachingTime: 1,
+                      }
+                    }
+                  ]
+                }
+            },
+            {
+                $lookup: {
+                  from: "bookings",
+                  localField: "bookingId",
+                  foreignField: "_id",
+                  as: "allBookingArchive",
+                  pipeline: [
+                    {
+                      $project: {
+                        to: 1,
+                        from: 1,
+                        departureTime: 1,
+                        reachingTime: 1,
+                      }
+                    }
+                  ]
+                }
+            },
+            {
+                $project: {
+                  trip: "$allTripsArchive",
+                  booking: "$allBookingArchive",
+                  conclusionId: 1,
+                  conclusionOfTrip: 1,
+                  tripId: 1,
+                  bookingId: 1,
+                  date: 1,
                 }
             }
         ]);
+
+
+        // const trips = await User.aggregate([
+        //     {
+        //         $match: {
+        //             _id: new mongoose.Types.ObjectId(req.user?._id),
+        //         },
+        //     },
+        //     {
+        //         $lookup: {
+        //             from: "conclusions",
+        //             let: { tripIds: "$tripsArchive" },
+        //             pipeline: [
+        //                 {
+        //                     $match: {
+        //                         $expr: { $in: ["$_id", "$$tripIds"] },
+        //                         archive: true,
+        //                     },
+        //                 },
+        //                 {
+        //                     $project: {
+        //                         date: 1,
+        //                         tripId: 1,
+        //                         conclusion: 1,
+        //                         bookingId: 1,
+        //                     },
+        //                 },
+        //             ],
+        //             as: "result",
+        //         },
+        //     },
+        //     {
+        //         $unwind: "$result",
+        //     },
+        //     {
+        //         $lookup: {
+        //             from: "trips",
+        //             let: { tripId: "$result.tripId" },
+        //             pipeline: [
+        //                 {
+        //                     $match: {
+        //                         $expr: { $eq: ["$_id", "$$tripId"] },
+        //                     },
+        //                 },
+        //                 {
+        //                     $project: {
+        //                         to: 1,
+        //                         from: 1,
+        //                         departureTime: 1,
+        //                         reachingTime: 1,
+        //                     },
+        //                 },
+        //             ],
+        //             as: "tripDetails",
+        //         },
+        //     },
+        //     {
+        //         $lookup: {
+        //             from: "bookings",
+        //             let: { bookingId: "$result.bookingId" },
+        //             pipeline: [
+        //                 {
+        //                     $match: {
+        //                         $expr: { $eq: ["$_id", "$$bookingId"] },
+        //                     },
+        //                 },
+        //                 {
+        //                     $project: {
+        //                         to: 1,
+        //                         from: 1,
+        //                         departureTime: 1,
+        //                         reachingTime: 1,
+        //                     },
+        //                 },
+        //             ],
+        //             as: "bookingDetails",
+        //         },
+        //     },
+        //     {
+        //         $project: {
+        //             conclusionId: "$result._id",
+        //             conclusionOfTrip: "$result.conclusion",
+        //             tripId: "$result.tripId",
+        //             bookingId: "$result.bookingId",
+        //             date: "$result.date",
+        //             trip: { $arrayElemAt: ["$tripDetails", 0] },
+        //             booking: { $arrayElemAt: ["$bookingDetails", 0] },
+        //         },
+        //     },
+        //     {
+        //         $sort: {
+        //             date: 1,
+        //         },
+        //     },
+        // ]);        
 
         return res
             .status(200)
