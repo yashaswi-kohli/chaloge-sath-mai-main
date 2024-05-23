@@ -7,7 +7,6 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/AsyncHandler";
 import Conclusion from "../models/conclusion.model";
 import mongoose, { isValidObjectId } from "mongoose";
-import { pipeline } from "stream";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
@@ -16,12 +15,6 @@ export interface AuthenticatedRequest extends Request {
 export const cancelBooking = async function (trip : any, booking: any, driverCancel: boolean, deleteTrip: boolean) {
 
         let updatedTrip : any = null;
-
-        // const trip = await Trip.findById(tripId);
-        // if(!trip) throw new ApiError(404, "Trip not found");
-        
-        // const booking = await Booking.findById(bookingId);
-        // if(!booking) throw new ApiError(404, "Booking not found");
 
         const driver = await User.findById(trip.user);
         if(!driver) throw new ApiError(404, "Driver not found");
@@ -57,9 +50,13 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
                 await userConclusion.save()
             }
 
+            const bookingId = booking._id;
+
             //* updating the seats of the trip
             const seatLeft = trip.seats + booking.noOfSeat;
-            const customerList = trip.customer.filter((customer: any) => customer !== booking);
+            const customerList = trip.customer.filter((customer: any) => {
+                return customer._id.toString() !== bookingId.toString();
+            });
             updatedTrip = await Trip.findByIdAndUpdate(
                 booking.tripId,
                 {
@@ -78,7 +75,7 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
 
 
             //* updating the cocnlusion for the driver
-            const driverConclusion = await Conclusion.findOne({ tripId: trip._id, travellerId: trip.user });
+            const driverConclusion = await Conclusion.findOne({ tripId: trip._id, driverId: trip.user });
             if(!driverConclusion) throw new ApiError(404, "Driver conclusion not found");
 
             driverConclusion.conclusion = "You cancelled the trip.";
@@ -211,31 +208,17 @@ export const showBooking = asyncHandler(async (req: AuthenticatedRequest, res: R
                     {
                         $lookup: {
                             from: "trips",
-                            localField: "user",
+                            localField: "tripId",
                             foreignField: "_id",
-                            as: "trip",
+                            as: "tripDetails",
                             pipeline: [
                                 {
-                                    $project: {
-                                        _id: 1,
-                                        day,
-                                        date,
-                                        month,
-                                        user: 1,
-                                        reachingTime: rt,
-                                        departureTime: dt,
-                                        from: 1,
-                                        to: 1,
-                                        price: 1,
+                                    $lookup: {
+                                        from: "users",
+                                        localField: "user",
+                                        foreignField: "_id",
+                                        as: "driverDetails",
                                         pipeline: [
-                                            {
-                                                $lookup: {
-                                                    from: "users",
-                                                    localField: "user",
-                                                    foreignField: "_id",
-                                                    as: "driver",
-                                                },
-                                            },
                                             {
                                                 $project: {
                                                     firstName: 1,
@@ -245,18 +228,37 @@ export const showBooking = asyncHandler(async (req: AuthenticatedRequest, res: R
                                         ]
                                     },
                                 },
+                                {
+
+                                    $project: {
+                                        _id: 1,
+                                        user: 1,
+                                        from: 1,
+                                        to: 1,
+                                        price: 1,
+                                        driverDetails: 1,
+                                    },
+                                },
                             ],
                         },
                     },
                     {
+                        $addFields: {
+                            fulldateTiming: {
+                                day: day,
+                                date: date,
+                                month: month,
+                                departureTime: dt,
+                                reachingTime: rt,
+                            }
+                        },
+                    },
+                    {
                         $project: {
-                            day,
-                            date,
-                            month,
-                            departureTime: dt,
-                            reachingTime: rt,
+                            tripDetails: 1,
                             from: 1,
                             to: 1,
+                            noOfSeat: 1,
                         }
                     },
                 ]);
@@ -269,15 +271,38 @@ export const showBooking = asyncHandler(async (req: AuthenticatedRequest, res: R
                         },
                     },
                     {
+                        $lookup: {
+                            from: "users",
+                            localField: "user",
+                            foreignField: "_id",
+                            as: "customerDetails",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        firstName: 1,
+                                        lastName: 1,
+                                    }
+                                },
+                            ]
+                        },
+                    },
+                    {
+                        $addFields: {
+                            fulldate: {
+                                day: day,
+                                date: date,
+                                month: month,
+                                departureTime: dt,
+                                reachingTime: rt,
+                            }
+                        },
+                    },
+                    {
                         $project: {
-                            day,
-                            date,
-                            month,
-                            departureTime: dt,
-                            reachingTime: rt,
+                            fulldate: 1,
                             from: 1,
                             to: 1,
-                            customer: 1,
+                            customerDetails: 1,
                         }
                     }
                 ]);
@@ -299,14 +324,16 @@ export const showBooking = asyncHandler(async (req: AuthenticatedRequest, res: R
 
 export const cancelYourBooking = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { bookingId } = req.params;
-    if(!bookingId || isValidObjectId(bookingId)) throw new ApiError(400, "Booking id is required");
+    if(!bookingId || !isValidObjectId(bookingId)) throw new ApiError(400, "Booking id is required");
 
     try {
-        const trip = await Booking.findById(bookingId);
-        if(!trip) throw new ApiError(404, "Booking not found");
 
         const booking = await Booking.findById(bookingId);
-        if(!booking) throw new ApiError(404, "Booking not found");
+        if(!booking) throw new ApiError(404, "Booking not found")
+
+        const tripId = booking.tripId;
+        const trip = await Trip.findById(tripId.toString());
+        if(!trip) throw new ApiError(404, "Trip not found");
 
         const updatedTrip = await cancelBooking(trip, booking, false, false);
         if(!updatedTrip) throw new ApiError(404, "Something went wrong while cancelling your ride");

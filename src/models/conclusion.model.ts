@@ -1,6 +1,7 @@
 import mongoose, {Schema, Document} from "mongoose";
 
 export interface ConclustionI extends Document {
+    date: Date;
     archive: boolean;
     conclusion: string;
     tripId: Schema.Types.ObjectId;
@@ -10,6 +11,10 @@ export interface ConclustionI extends Document {
 };
 
 export const ConclustionSchema : Schema<ConclustionI> = new Schema({
+    date: {
+        type: Date,
+        required: true,
+    },
     driverId: {
         type: Schema.Types.ObjectId,
         ref: "User",

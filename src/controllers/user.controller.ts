@@ -7,6 +7,10 @@ import User, { UserI } from "../models/user.model";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary";
 import mongoose from "mongoose";
+import Conclusion from "../models/conclusion.model";
+import { deprecate } from "util";
+import { arch } from "os";
+import { pipeline } from "stream";
 
 
 function timeDiff(start: number) : boolean {
@@ -331,29 +335,78 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
 export const getArchiveTrips = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     try {
         const trips = await User.aggregate([
-            // {
-            //     $match: {
-            //         _id: new mongoose.Types.ObjectId(req.user?._id),
-            //     }
-            // },
-            // {
-            //     $lookup: {
-            //         from: "trips",
-            //         localField: "tripsHistory",
-            //         foreignField: "_id",
-            //         as: "tripsHistory",
-            //         pipeline: [
-            //             {
-            //                 $lookup: {
-            //                     from: "users",
-            //                     localField: "customer",
-            //                     foreignField: "_id",
-            //                     as: "customer"
-            //                 }
-            //             }
-            //         ]
-            //     }
-            // }
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(req.user?._id),
+                  },
+            },
+            {
+                $lookup: {
+                    from: "conclusion",
+                    localField: "tripsArchive",
+                    foreignField: "_id",
+                    as: "tripsArchive",
+                    pipeline: [
+                        {
+                            $match: {
+                                archive: true,
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "trip",
+                                localField: "tripId",
+                                foreignField: "_id",
+                                as: "tripDetail",
+                                pipeline: [
+                                    {
+                                        $project: {
+                                            customer: 1,
+                                            departureTime: 1,
+                                            date: 1,
+                                            from: 1,
+                                            to: 1,
+                                            reachingTime: 1,
+                                        },
+                                    },
+                                    {
+                                        $addFields: {
+                                            $cond: {
+                                                if: { $in: [req.user?._id, "%tripDetail.customer"] },
+                                                then: {
+                                                    user: 1,
+                                                },
+                                                else: {
+                                                    user: 0,
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            $project: {
+                                booking: 1,
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                $sort: {
+                    "tripsArchive.date": -1,
+                }
+            },
+            {
+                $project: {
+                    trip: 1,
+                    booking: 1,
+                    traveller: 1,
+                    conclusion: 1,
+                    date: 1,
+                }
+            }
         ]);
 
         return res
@@ -361,13 +414,16 @@ export const getArchiveTrips = asyncHandler(async (req: AuthenticatedRequest, re
             .json(
             new ApiResponse(
                 200,
-                trips[0].tripsHistory,
-                "successfully get user watch history"
+                trips,
+                "successfully get trips history"
             )
-            );
+        );
     } 
     catch (error: any) {
-        
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong while getting user watch history"
+        );
     }
 });
 
