@@ -29,8 +29,6 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
 
         userConclusion.archive = true;
 
-        console.log(deleteTrip, driverCancel);
-
         if(!deleteTrip) 
         {
 
@@ -73,11 +71,14 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
             );
         }
         else {
+            //* archiving the trip
+            trip.archive = true;
+            await trip.save();
+
             //* updating the conclusion for the user
             userConclusion.archive = true;
             userConclusion.conclusion = "The driver cancelled the trip.";
             await userConclusion.save();
-
 
             //* updating the cocnlusion for the driver
             const driverConclusion = await Conclusion.findOne({ tripId: trip._id, driverId: trip.user });
@@ -86,7 +87,6 @@ export const cancelBooking = async function (trip : any, booking: any, driverCan
             driverConclusion.archive = true;
             driverConclusion.conclusion = "You cancelled the trip.";
             await driverConclusion.save();
-
 
             //* increasing the cancelled rides of the driver
             driver.cancelledRides = driver.cancelledRides + 1;

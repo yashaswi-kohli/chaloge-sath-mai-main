@@ -90,7 +90,7 @@ export const UserSchema : Schema<UserI> = new Schema(
         },
         prefrence: {
             type: [Number],
-            default: [0, 0, 0, 0],
+            default: [1, 4, 7, 10],
         },
         tripsArchive: [
             {

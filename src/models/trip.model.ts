@@ -1,4 +1,5 @@
 import mongoose, {Schema, Document} from "mongoose";
+import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 export interface TripI extends Document {
     user: Schema.Types.ObjectId;
@@ -6,12 +7,15 @@ export interface TripI extends Document {
     from: string;
     to: string;
     car: string;
+    tripTime: number;
+    maxTwoSeatsAtBack: boolean;
     departureTime: Date;
     reachingTime: Date;
     price: number;
     seats: number;
     about: string;
     archive: boolean;
+    date: Date;
     instantBooking: boolean;
 };
 
@@ -41,6 +45,14 @@ export const TripSchema : Schema<TripI> = new Schema(
             type: Date,
             required: true,
         },
+        tripTime: {
+            type: Number,
+            requried: true,
+        },
+        maxTwoSeatsAtBack: {
+            type: Boolean,
+            required: true,
+        },
         price: {
             type: Number,
             required: true,
@@ -63,6 +75,9 @@ export const TripSchema : Schema<TripI> = new Schema(
         },
     }, { timestamps: true, }
 );
+
+TripSchema.index({ from: "text", to: "text" });
+TripSchema.plugin(mongooseAggregatePaginate);
 
 const Trip = mongoose.model<TripI> ("Trip", TripSchema);
 export default Trip;

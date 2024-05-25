@@ -9,9 +9,56 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { cancelBooking } from "./booking.controller";
 import Conclusion from "../models/conclusion.model";
+import { userInfo } from "os";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
+}
+
+export const checkTripsWhichAreToBeArchived = async function () {
+    try {
+        const trips = await Trip.find({ reachingTime: { $lt: new Date() } });
+        if(trips.length > 0) {
+            trips.map(async (trip: any) => 
+            {
+                if(trip.customer.length > 0) 
+                {
+                    trip.customer.map(async (customer: any) => {
+                        const booking = await Booking.findById(customer);
+                        if(!booking) throw new ApiError(404, "Booking not found");
+
+                        const customerConclusion = await Conclusion.findOne({ tripId: trip._id, travellerId: booking.user });
+                        if(!customerConclusion) throw new ApiError(404, "Customer conclusion not found");
+
+                        customerConclusion.archive = true;
+                        customerConclusion.conclusion = "Trip is completed.";
+                        await customerConclusion.save();
+
+                        await Booking.findByIdAndDelete(customer);
+                        
+                    });
+                }
+
+                const driverConclusion = await Conclusion.findOne({ tripId: trip._id, driverId: trip.user });
+                if(!driverConclusion) {
+                    console.log("no driver conclusion found");
+                    throw new ApiError(400, "Driver Conclusion not found")
+                }
+
+                driverConclusion.archive = true;
+                driverConclusion.conclusion = "Trip is completed.";
+                await driverConclusion.save();
+
+                trip.archive = 0;
+                await trip.save();
+
+            });
+        }
+    }
+    catch (error: any) {
+        throw new ApiError(500, error?.message || "Something went wrong while checking the trips which are to be cancelled");
+    }
+
 }
 
 const checkOrganiserOfTrip = async function (tripId: string, userId: string) {
@@ -32,7 +79,8 @@ const checkOrganiserOfTrip = async function (tripId: string, userId: string) {
 export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
 
     const { from, to, departureTime, reachingTime, seats, car, price, instantBooking } = req.body;
-    if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price ||!instantBooking) throw new ApiError(400, "All fields are required");
+    if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price ||!instantBooking) 
+        throw new ApiError(400, "All fields are required");
 
     try {
 
@@ -199,7 +247,198 @@ export const getATrip = asyncHandler(async (req: Request, res: Response) => {
 
 //Todo      it will get all the trips related to search query
 export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
+    let { from, to, date, seats, sortBy, sortType, prefrence, iBooking, timePeriod } = req.body;
+    if(!from && !to && !date && !seats) throw new ApiError(400, "All fields are required");
 
+    try {
+
+        const pipeline : any = [];
+
+        const dateFormat = moment(date, "YYYY-MM-DD HH:mm").toDate();
+        const fullDate = dateFormat.getDate() + "-" + dateFormat.getMonth() + "-" + dateFormat.getFullYear();
+
+        //* searching trips for exact date and min give nubmer seats
+        pipeline.push({
+            $match: {
+                date: fullDate,
+                seats: { $gte: seats - 1},
+            },
+        });
+
+
+        //* searching for the from and to location
+        pipeline.push(
+            {
+                $search: {
+                    index: "from-search",
+                    text: {
+                        query: from,
+                        path: "from",
+                    },
+                },
+            },
+            {
+                $search: {
+                    index: "to-search",
+                    text: {
+                        query: to,
+                        path: "to",
+                    },
+                }
+            }
+        );
+
+
+        //* if user want to have a instant booking
+        if(iBooking) {
+            pipeline.push({
+                $match: {
+                    instantBooking: iBooking,
+                },
+            });
+        }
+
+
+        //* if user wnat to go between a particular time period
+        if(timePeriod > -1) {
+
+            let less = ((timePeriod) * 6);
+            let greater = ((timePeriod + 1) * 6);
+
+            if(timePeriod == 0) {
+                less = -1;
+            }
+
+            pipeline.push(
+                {
+                    $addFields: {
+                        hour: {
+                            $hour: {
+                                date: "$departureTime",
+                                timezone: "+0530",
+                            }
+                        }
+                    }
+                },
+                {
+                    $match: {
+                        hour: {$gte: less, $lt: greater}
+                    }
+                }
+            )
+        }
+
+
+        //* if user want to sort the trips by departure time or lowest price or by the shortest time
+        if(sortType && sortBy) {
+            pipeline.push({
+                $sort: {
+                    [sortBy as string]: sortType === "asc" ? 1 : -1
+                }
+            });
+        } else pipeline.push({ $sort: { createdAt: -1 } });
+
+
+        //* if user want to have a prefrence like allowing cigratte or with pets
+        if(prefrence.lenght > 0) {
+
+            let newPrefrence : any = [];
+
+            if(prefrence[0] && prefrence[1]) newPrefrence = [ prefrence[0], prefrence[1] + 3 ];
+            else if(prefrence[0]) newPrefrence = [ prefrence[0] ];
+            else newPrefrence = [ prefrence[1] + 3 ];
+
+            pipeline.push(
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "user",
+                        foreignField: "_id",
+                        as: "userInfo",
+                        pipeline: [
+                            {
+                                $match: newPrefrence,
+                            },
+                            {
+                                $project: {
+                                    firstName: 1,
+                                    lastName: 1,
+                                    avatar: 1,
+                                    ratingS: 1,
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    $project: {
+                        from: 1,
+                        to: 1,
+                        car: 1,
+                        seats: 1,
+                        userInfo: 1,
+                        departureTime: 1,
+                        reachingTime: 1,
+                        timeDiff: 1,
+                        price: 1,
+                        instantBooking: 1,
+                        maxTwoSeatsAtBack: 1,
+                    }
+                }
+            );
+        }
+        else {
+            pipeline.push(
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "user",
+                        foreignField: "_id",
+                        as: "userInfo",
+                        pipeline: [
+                            {
+                                $project: {
+                                    firstName: 1,
+                                    lastName: 1,
+                                    avatar: 1,
+                                    ratingS: 1,
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    $project: {
+                        from: 1,
+                        to: 1,
+                        car: 1,
+                        seats: 1,
+                        userInfo: 1,
+                        departureTime: 1,
+                        reachingTime: 1,
+                        timeDiff: 1,
+                        price: 1,
+                        instantBooking: 1,
+                        maxTwoSeatsAtBack: 1,
+                    }
+                }
+            );
+        }
+
+        const trips = await Trip.aggregate(pipeline);
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, trips, "Trips found successfully"));
+    } 
+    catch (error: any) {
+        throw new ApiError(
+            500,
+            error?.message || "something went wrong updating a trip"
+        )
+    }
+
+    
 });
 
 export const updateTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
