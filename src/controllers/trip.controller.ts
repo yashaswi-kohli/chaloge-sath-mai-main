@@ -501,34 +501,6 @@ export const updateTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
     }
 });
 
-export const sendRequest = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { tripId } = req.params;
-    if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
-
-    const {from, to, noOfSeat} = req.body;
-    if(!from || !to || !noOfSeat) throw new ApiError(400, "All fields are required");
-
-    try {
-        const trip = await Trip.findById(tripId);
-        if(!trip) throw new ApiError(404, "Trip not found");
-
-        const user = await User.findById(req.user?._id).select( "-password -refreshToken");
-        if(!user) throw new ApiError(404, "User not found");
-
-
-
-        return res
-            .status(200)
-            .json(new ApiResponse(200, {}, "Request sent successfully"));
-    } 
-    catch (error: any) {
-        throw new ApiError(
-            500,
-            error?.message || "something went wrong sending a request"
-        );
-    }
-});
-
 export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { tripId } = req.params;
     if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
