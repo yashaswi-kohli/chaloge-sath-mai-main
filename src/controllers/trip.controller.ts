@@ -9,6 +9,8 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { cancelBooking } from "./booking.controller";
 import Conclusion from "../models/conclusion.model";
+import { sendBookingDetail } from "../email and sms/sendBookingDetail";
+import { sendTravellerCancelDetail } from "../email and sms/sendTravellerCancellingDetails";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
@@ -94,11 +96,10 @@ const checkOrganiserOfTrip = async function (tripId: string, userId: string) {
 
 export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
 
-    const { from, to, departureTime, reachingTime, seats, car, price, instantBooking, maxTwoSeatsAtBack } = req.body;
+    const { from, to, departureTime, reachingTime, seats, car, price, maxTwoSeatsAtBack } = req.body;
     if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price ) 
         throw new ApiError(400, "All fields are required");
 
-    // if(instantBooking !== undefined || maxTwoSeatsAtBack !== undefined)
 
     try {
         const reachingT = moment(reachingTime,"YYYY-MM--DD HH:mm").toDate();
@@ -125,7 +126,6 @@ export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
             seats,
             car,
             price,
-            instantBooking,
             maxTwoSeatsAtBack,
         });
 
@@ -257,7 +257,6 @@ export const getATrip = asyncHandler(async (req: Request, res: Response) => {
                     userInfo: 1,
                     car: 1,
                     seats: 1,
-                    instantBooking: 1,
                 },
             }
         ]);
@@ -294,16 +293,6 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
                 seats: { $gte: Number(seats) - 1},
             },
         });
-
-
-        //* if user want to have a instant booking
-        if(iBooking) {
-            pipeline.push({
-                $match: {
-                    instantBooking: true,
-                },
-            });
-        }
 
 
         // //* when user want to have only max 2 people at the back
@@ -413,7 +402,6 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
                         reachingTime: 1,
                         timeDiff: 1,
                         price: 1,
-                        instantBooking: 1,
                         maxTwoSeatsAtBack: 1,
                     }
                 }
@@ -450,7 +438,6 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
                         reachingTime: 1,
                         timeDiff: 1,
                         price: 1,
-                        instantBooking: 1,
                         maxTwoSeatsAtBack: 1,
                     }
                 }
@@ -484,8 +471,8 @@ export const updateTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
         const trip = await Trip.findById(tripId);
         if(!trip) throw new ApiError(404, "Trip not found");
 
-        const { from, to, departureTime, reachingTime, seats, car, price, instantBooking } = req.body;
-        if(!from && !to && !departureTime && !reachingTime && !seats && !car && !price && !instantBooking) 
+        const { from, to, departureTime, reachingTime, seats, car, price } = req.body;
+        if(!from && !to && !departureTime && !reachingTime && !seats && !car && !price) 
             throw new ApiError(400, "Give some fields that are to be update");
 
         const reachingT = moment(reachingTime,"YYYY-MM--DD HH:mm").toDate();
@@ -498,7 +485,6 @@ export const updateTrip = asyncHandler(async (req: AuthenticatedRequest, res: Re
         if(seats) trip.seats = seats;
         if(car) trip.car = car;
         if(price) trip.price = price;
-        if(instantBooking) trip.instantBooking = instantBooking;
 
         const updatedTrip = await trip.save();
         if(!updatedTrip) throw new ApiError(500, "Trip not updated");
@@ -553,9 +539,11 @@ export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: 
     try {
         const trip = await Trip.findById(tripId);
         if(!trip) throw new ApiError(404, "Trip not found");
+
+        const driver = await User.findById(trip.user);
+        if(!driver) throw new ApiError(404, "Driver not found");
     
         const seatLeft : Number = trip.seats - noOfSeat;
-    
         const newBooking = await Booking.create(
             {
                 user: req.user?._id,
@@ -584,6 +572,10 @@ export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: 
         });
         user.tripsArchive.push(conclusion._id);
         await user.save();
+
+        const dateOfTrip = trip.departureTime.getDate().toString();
+        const result = await sendBookingDetail(driver.email, user.firstName, noOfSeat, from, to, dateOfTrip);
+        if(result.statusCode < 369) throw new ApiError(400, "Error while sending the verification code to email");
         
         return res
             .status(200)
@@ -599,7 +591,6 @@ export const bookYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: 
 
 });
 
-//todo      inform the travellers from message
 export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { tripId } = req.params;
     if(!tripId || !isValidObjectId(tripId)) throw new ApiError(400, "Trip id is required");
@@ -618,6 +609,14 @@ export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res
     
                 const chk = await cancelBooking(trip, booking, true, true);
                 if(!chk) throw new ApiError(500, "Booking not deleted");
+
+                const traveller = await User.findById(booking.user);
+                if(!traveller) throw new ApiError(404, "Traveller not found");
+
+                const purpose = "the driver cancelled the whole tirp";
+                const dateOfTrip = trip.departureTime.getDate().toString();
+                const result = await sendTravellerCancelDetail(traveller.email, traveller.firstName, trip.from, trip.to, dateOfTrip, purpose);
+                if(result.statusCode < 369) throw new ApiError(400, "Error while sending the cancellation email to traveller.");
             });
         }
         else {
@@ -628,6 +627,8 @@ export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res
             driverConclusion.conclusion = "You cancelled the trip.";
             await driverConclusion.save();
         }
+
+        
 
         return res
             .status(200)
@@ -641,7 +642,6 @@ export const cancelYourTrip = asyncHandler(async (req: AuthenticatedRequest, res
     }
 });
 
-//todo      inform the travellers from message
 export const cancelOthersTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { tripId, bookingId } = req.params;
 
@@ -661,6 +661,15 @@ export const cancelOthersTrip = asyncHandler(async (req: AuthenticatedRequest, r
 
         const updatedTrip = await cancelBooking(trip, booking, true, false);
         if(!updatedTrip) throw new ApiError(500, "Booking not deleted");
+
+        const traveller = await User.findById(booking.user);
+        if(!traveller) throw new ApiError(404, "Traveller not found");
+
+        const purpose = "the driver cancelled the your booking.";
+        const dateOfTrip = trip.departureTime.getDate().toString();
+
+        const result = await sendTravellerCancelDetail(traveller.email, traveller.firstName, trip.from, trip.to, dateOfTrip, purpose);
+        if(result.statusCode < 369) throw new ApiError(400, "Error while sending the cancellation email to traveller.");
 
         return res
             .status(200)

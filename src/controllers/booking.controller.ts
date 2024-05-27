@@ -7,6 +7,7 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/AsyncHandler";
 import Conclusion from "../models/conclusion.model";
 import mongoose, { isValidObjectId } from "mongoose";
+import { sendDriverCancelDetail } from "../email and sms/sendDriverCacellingDetails";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
@@ -341,8 +342,18 @@ export const cancelYourBooking = asyncHandler(async (req: AuthenticatedRequest, 
         const trip = await Trip.findById(tripId.toString());
         if(!trip) throw new ApiError(404, "Trip not found");
 
+        const driver = await User.findById(trip.user);
+        if(!driver) throw new ApiError(404, "Driver not found");
+
         const updatedTrip = await cancelBooking(trip, booking, false, false);
         if(!updatedTrip) throw new ApiError(404, "Something went wrong while cancelling your ride");
+
+        const user = await User.findById(booking.user);
+        if(!user) throw new ApiError(404, "Traveller not found");
+
+        const dateOfTrip = trip.departureTime.toDateString();
+        const result = await sendDriverCancelDetail(driver.email, user.firstName, trip.from, trip.to, dateOfTrip);
+        if(result.statusCode < 369) throw new ApiError(400, "Error while sending the cancellation email to traveller.");
 
         return res
             .status(200)

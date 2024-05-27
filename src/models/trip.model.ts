@@ -16,7 +16,6 @@ export interface TripI extends Document {
     seats: number;
     about: string;
     archive: boolean;
-    instantBooking: boolean;
 };
 
 export const TripSchema : Schema<TripI> = new Schema(
@@ -59,10 +58,6 @@ export const TripSchema : Schema<TripI> = new Schema(
         },
         seats: {
             type: Number,
-            required: true,
-        },
-        instantBooking: {
-            type: Boolean,
             required: true,
         },
         date: {
