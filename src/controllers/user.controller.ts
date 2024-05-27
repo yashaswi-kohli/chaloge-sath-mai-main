@@ -192,10 +192,6 @@ export const updateUserDetails = asyncHandler(async (req: AuthenticatedRequest, 
     if(!firstName && !lastName && !birthdate && !number && !email && !about && !prefrence) 
         throw new ApiError(400, "Send fields name which are to be updated");
 
-    let isNumberVerified = true, isEmailVerified = true;
-    if(email) isEmailVerified = false;
-    if(number) isNumberVerified = false;
-
     try {
         const user = await User.findById(req.user?._id);
         if(!user) throw new ApiError(404, "User Not Found");
@@ -203,10 +199,16 @@ export const updateUserDetails = asyncHandler(async (req: AuthenticatedRequest, 
         if(about) user.about = about;
         if(lastName) user.lastName = lastName;
         if(birthdate) user.birthdate = birthdate;
-        if(prefrence) user.prefrence = prefrence;
         if(firstName) user.firstName = firstName;
-        if(email) user.email = email, isEmailVerified = false;
-        if(number) user.number = number, isNumberVerified = false;
+        if(email) user.email = email, user.isEmailVerified = false;
+        if(number) user.number = number, user.isNumberVerified = false;
+
+        if(prefrence) {
+            for(let i = 0; i < 4; ++i) {
+                prefrence[i] += (i * 3);
+            } user.prefrence = prefrence;
+        }
+
         await user.save();
 
         const updatedUser = await User.findById(req.user?._id);

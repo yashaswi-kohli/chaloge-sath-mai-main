@@ -28,14 +28,19 @@
 // export interface Chat extends Document {
 //     user: User;
 //     sender: User;
-//     message: [Message];
+//     message: Schema.Types.ObjectId;
 // };
 
 // export const ChatSchema : Schema<Chat> = new Schema(
 //     {
 //         user: UserSchema,
 //         sender: UserSchema,
-//         message: [MessageSchema]
+//         message: [
+//             {
+//                 type: Schema.Types.ObjectId,
+//                 ref: "Conclusion",
+//             }
+//         ],
 //     }
 // );
 

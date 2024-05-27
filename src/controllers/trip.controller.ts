@@ -9,10 +9,26 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { cancelBooking } from "./booking.controller";
 import Conclusion from "../models/conclusion.model";
-import { userInfo } from "os";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
+}
+
+const changingDateFormat = (date: Date) : string => {
+
+    let departureDate : string;
+    const yyyy = date.getFullYear().toString();
+    
+    let dd = date.getDate();
+    let mm = date.getMonth() + 1;
+
+    if (dd < 10) departureDate = "0" + dd + "/";
+    else departureDate = dd + "/";
+
+    if (mm < 10) departureDate  += "0" + mm  + "/" + yyyy;
+    else departureDate += mm + "/" + yyyy;
+
+    return departureDate;    
 }
 
 export const checkTripsWhichAreToBeArchived = async function () {
@@ -78,25 +94,39 @@ const checkOrganiserOfTrip = async function (tripId: string, userId: string) {
 
 export const createTrip = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
 
-    const { from, to, departureTime, reachingTime, seats, car, price, instantBooking } = req.body;
-    if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price ||!instantBooking) 
+    const { from, to, departureTime, reachingTime, seats, car, price, instantBooking, maxTwoSeatsAtBack } = req.body;
+    if(!from || !to || !departureTime || !reachingTime || !seats || !car || !price ) 
         throw new ApiError(400, "All fields are required");
 
-    try {
+    // if(instantBooking !== undefined || maxTwoSeatsAtBack !== undefined)
 
+    try {
         const reachingT = moment(reachingTime,"YYYY-MM--DD HH:mm").toDate();
         const departureT = moment(departureTime, "YYYY-MM-DD HH:mm").toDate();
+
+        const date = changingDateFormat(departureT);
+
+        let timeDiff : number = (reachingT.valueOf() - departureT.valueOf());
+        let minutes = Math.floor((timeDiff / (1000 * 60)) % 60);
+        let hours = Math.floor((timeDiff / (1000 * 60 * 60)) % 24);
+        
+
+        const tripTime = ((hours < 10) ? "0" + hours.toString() : hours.toString()) + 
+                         ((minutes < 10) ? "0" + minutes.toString() : minutes.toString());
         
         const trip = await Trip.create({
             user: req.user?._id,
             from,
             to,
+            tripTime,
+            date,
             departureTime: departureT,
             reachingTime: reachingT,
             seats,
             car,
             price,
             instantBooking,
+            maxTwoSeatsAtBack,
         });
 
         const conclusion = await Conclusion.create({
@@ -245,69 +275,52 @@ export const getATrip = asyncHandler(async (req: Request, res: Response) => {
     
 })
 
-//Todo      it will get all the trips related to search query
 export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
-    let { from, to, date, seats, sortBy, sortType, prefrence, iBooking, timePeriod } = req.body;
+    let { from, to, date, seats, sortBy, sortType, prefrence, iBooking, timePeriod, maxTwoSeatsAtBack } = req.query;
     if(!from && !to && !date && !seats) throw new ApiError(400, "All fields are required");
 
     try {
 
         const pipeline : any = [];
+        const dateFormat = moment(date as string, "YYYY-MM-DD").toDate();
+        const fullDate = changingDateFormat(dateFormat);
 
-        const dateFormat = moment(date, "YYYY-MM-DD HH:mm").toDate();
-        const fullDate = dateFormat.getDate() + "-" + dateFormat.getMonth() + "-" + dateFormat.getFullYear();
-
-        //* searching trips for exact date and min give nubmer seats
+        //* searching trips for exact from, to date and min give nubmer seats
         pipeline.push({
             $match: {
+                to,
+                from,
                 date: fullDate,
-                seats: { $gte: seats - 1},
+                seats: { $gte: Number(seats) - 1},
             },
         });
-
-
-        //* searching for the from and to location
-        pipeline.push(
-            {
-                $search: {
-                    index: "from-search",
-                    text: {
-                        query: from,
-                        path: "from",
-                    },
-                },
-            },
-            {
-                $search: {
-                    index: "to-search",
-                    text: {
-                        query: to,
-                        path: "to",
-                    },
-                }
-            }
-        );
 
 
         //* if user want to have a instant booking
         if(iBooking) {
             pipeline.push({
                 $match: {
-                    instantBooking: iBooking,
+                    instantBooking: true,
                 },
             });
         }
 
 
-        //* if user wnat to go between a particular time period
-        if(timePeriod > -1) {
+        // //* when user want to have only max 2 people at the back
+        if(maxTwoSeatsAtBack) {
+            pipeline.push({
+                $match: {
+                    maxTwoSeatsAtBack: true,
+                },
+            });
+        }
 
-            let less = ((timePeriod) * 6);
-            let greater = ((timePeriod + 1) * 6);
 
-            if(timePeriod == 0) {
-                less = -1;
-            }
+        // //* if user wnat to go between a particular time period
+        if(timePeriod) {
+
+            let tp = Number(timePeriod)
+            let less = (tp * 6), greater = ((tp + 1) * 6);
 
             pipeline.push(
                 {
@@ -324,12 +337,13 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
                     $match: {
                         hour: {$gte: less, $lt: greater}
                     }
-                }
+                },
             )
         }
 
 
-        //* if user want to sort the trips by departure time or lowest price or by the shortest time
+
+        // //* if user want to sort the trips by departure time or lowest price or by the shortest time
         if(sortType && sortBy) {
             pipeline.push({
                 $sort: {
@@ -339,14 +353,18 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
         } else pipeline.push({ $sort: { createdAt: -1 } });
 
 
-        //* if user want to have a prefrence like allowing cigratte or with pets
-        if(prefrence.lenght > 0) {
+        // //* if user want to have a prefrence like allowing cigratte or with pets
+        if(prefrence) {
+            let pref = String(prefrence);
 
-            let newPrefrence : any = [];
+            let first = Number(pref[0]), second = 0;        
+            let newPrefrence : [number] = [0];
 
-            if(prefrence[0] && prefrence[1]) newPrefrence = [ prefrence[0], prefrence[1] + 3 ];
-            else if(prefrence[0]) newPrefrence = [ prefrence[0] ];
-            else newPrefrence = [ prefrence[1] + 3 ];
+            if(pref.length & 1) newPrefrence[0] = first;
+            else {
+                second = Number(pref[1]) + 3;
+                newPrefrence.push(second);
+            }
 
             pipeline.push(
                 {
@@ -357,7 +375,9 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
                         as: "userInfo",
                         pipeline: [
                             {
-                                $match: newPrefrence,
+                                $match: {
+                                    prefrence: { $all: newPrefrence }
+                                  },
                             },
                             {
                                 $project: {
@@ -368,6 +388,18 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
                                 }
                             }
                         ]
+                    }
+                },
+                {
+                    $addFields: {
+                        size: {
+                            $size: "$userInfo"
+                        }
+                    }
+                },
+                {
+                    $match: {
+                        size: {$gt: 0}
                     }
                 },
                 {
@@ -425,11 +457,11 @@ export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
             );
         }
 
-        const trips = await Trip.aggregate(pipeline);
+        const tripData = await Trip.aggregate(pipeline);
 
         return res
             .status(200)
-            .json(new ApiResponse(200, trips, "Trips found successfully"));
+            .json(new ApiResponse(200, tripData, "Trips found successfully"));
     } 
     catch (error: any) {
         throw new ApiError(

@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { verifyJwtToken } from "../middlewares/auth.middlewares";
-import { bookYourTrip, cancelOthersTrip, cancelYourTrip, createTrip, getATrip, updateTrip } from "../controllers/trip.controller";
+import { bookYourTrip, cancelOthersTrip, cancelYourTrip, createTrip, getATrip, getAllTrips, updateTrip } from "../controllers/trip.controller";
 
 const router = Router();
 router.use(verifyJwtToken);
 
+router.route("/").get(getAllTrips);
 router.route("/publish").post(createTrip);
 router.route("/:tripId/:bookingId").delete(cancelOthersTrip);
 
