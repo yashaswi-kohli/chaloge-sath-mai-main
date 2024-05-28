@@ -7,7 +7,7 @@ import { ApiResponse } from "../utils/ApiResponse";
 import User, { UserI } from "../models/user.model";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary";
-import { sendSMS } from "../email and sms/sendCodeSms";
+// import { sendSMS } from "../email and sms/sendCodeSms";
 
 
 function timeDiff(start: number) : boolean {
@@ -728,9 +728,9 @@ export const sendCodeForNumber = asyncHandler(async (req: AuthenticatedRequest, 
     
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-        const result = await sendSMS(user.number, user.firstName, verifyCode);
-        if(result.statusCode < 369) 
-            throw new ApiError(400, "Error while sending the verification code to number");
+        // const result = await sendSMS(user.number, user.firstName, verifyCode);
+        // if(result.statusCode < 369) 
+        //     throw new ApiError(400, "Error while sending the verification code to number");
     
         let time = new Date().valueOf();
         user.verirfyNumberTokenExpiry = time;
