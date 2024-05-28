@@ -5,7 +5,6 @@ Chaloge sath mai is simple carpooling application with all basic features like s
 + **Avatar upload an managemnet:** Avatar can be uploaded, at backend videos are being saved locally first for sake of all field's validations using multer, and further will get uploaded to cloudinary.
 + **Trips:** Users can publish, view, and cancel trips. They can also search for trips with various conditions, such as whether the driver allows pets or smoking.
 + **Booking:** A user can see all their booking or a particular one, and they can cancel it also.
-+ **Tweet:** A user can post tweets.
 
 
 ### Controllers:
