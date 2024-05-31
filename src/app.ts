@@ -23,12 +23,14 @@ app.use("/api/v1/ratings", ratingRouter);
 app.use("/api/v1/bookings", bookingRouter);
 
 app.use(function (req: express.Request, res: express.Response, next: express.NextFunction) {
+    next({ status: 401 });
     next({ status: 404 });
     next({ status: 409 });
     next({ status: 500 });
 });
 
 app.use(function (err: any, req: express.Request, res: express.Response, next: express.NextFunction) {
+    // console.log(err.message);
     res
         .status(err.statusCode)
         .send({

@@ -7,7 +7,7 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { asyncHandler } from "../utils/AsyncHandler";
 import Conclusion from "../models/conclusion.model";
 import mongoose, { isValidObjectId } from "mongoose";
-import { sendDriverCancelDetail } from "../email and sms/sendDriverCacellingDetails";
+import { sendDriverCancelDetail } from "../mails/sendDriverCacellingDetails";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
