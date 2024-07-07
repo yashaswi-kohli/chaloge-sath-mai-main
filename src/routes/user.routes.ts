@@ -10,6 +10,7 @@ import {
 	sendCodeForNumber,verifyCodeForNumber,
 	changePassword, sendCodeForForgetPassword, verifyCodeForForgetPassword,
 	getUserById,
+	refereshAccessToken,
 } from "../controllers/user.controller";
 
 const router = Router();
@@ -38,6 +39,7 @@ router.route("/update-avatar").patch(
 router.route("/login").post(loginUser);
 router.route("/logout").post(verifyJwtToken, logoutUser);
 
+router.route("/refresh-token").post(refereshAccessToken);
 router.route("/show/:userId").patch(verifyJwtToken, getUserById);
 router.route("/current-user").get(verifyJwtToken, getCurrentUser);
 

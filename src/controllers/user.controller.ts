@@ -1,14 +1,16 @@
+import jwt, { JwtPayload } from "jsonwebtoken";
 import mongoose from "mongoose";
 import { OPTIONS } from "../constants";
 import {Request, Response} from "express";
 import { ApiError } from "../utils/ApiError";
-import { sendEmail } from "../email and sms/sendCodeEmail";
+import { sendEmail } from "../mails/sendCodeEmail";
 import { ApiResponse } from "../utils/ApiResponse";
 import User, { UserI } from "../models/user.model";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { deleteFromCloudinary, extractPublicId, uploadOnCloudinary } from "../utils/cloudinary";
 // import { sendSMS } from "../email and sms/sendCodeSms";
 
+process.loadEnvFile();
 
 function timeDiff(start: number) : boolean {
     const end = new Date().valueOf();
@@ -159,17 +161,19 @@ export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
         const userId = req.user?._id;
         if (!userId) throw new ApiError(400, "User ID not found in request");
   
-        await User.findByIdAndUpdate(
+        const newUser = await User.findByIdAndUpdate(
           userId,
           {
-            $set: {
-              refreshToken: undefined,
+            $unset: {
+              refreshToken: 1,
             },
           },
           {
             new: true,
           }
         );
+
+        console.log(newUser);
   
         return res
           .status(200)
@@ -183,6 +187,36 @@ export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
         );
       }
 });
+
+export const refereshAccessToken = asyncHandler(async(req, res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    if (!incomingRefreshToken) throw new ApiError(401, "Unauthorized Request");
+
+    try {
+        const decodedRefreshToken: JwtPayload = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET as string) as JwtPayload;
+        const user = await User.findById(decodedRefreshToken?._id);
+
+        if (!user) throw new ApiError(401, "Invalid Refresh Token");
+        if (incomingRefreshToken !== user?.refreshToken) throw new ApiError(401, "Refresh Token is used or expried");
+
+        const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
+    
+        return res
+        .status(200)
+        .cookie("accessToken", accessToken, OPTIONS)
+        .cookie("refreshToken", refreshToken, OPTIONS)
+        .json(
+            new ApiResponse(
+                200, 
+                {accessToken, refreshToken},
+                "Access token refreshed"
+            )
+        )
+    } 
+    catch (error: any) {
+        throw new ApiError(401, error?.message || "Invalid refresh token")
+    }
+})
 
 export const updateUserDetails = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const { firstName, lastName, birthdate, number, email, about, prefrence } = req.body;

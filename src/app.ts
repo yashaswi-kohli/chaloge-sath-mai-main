@@ -22,4 +22,24 @@ app.use("/api/v1/trips", tripRouter);
 app.use("/api/v1/ratings", ratingRouter);
 app.use("/api/v1/bookings", bookingRouter);
 
+app.use(function (req: express.Request, res: express.Response, next: express.NextFunction) {
+    next({ status: 401 });
+    next({ status: 404 });
+    next({ status: 409 });
+    next({ status: 500 });
+});
+
+app.use(function (err: any, req: express.Request, res: express.Response, next: express.NextFunction) {
+    // console.log(err.message);
+    res
+        .status(err.statusCode)
+        .send({
+            status: err.statusCode,
+            success: err.success,
+            message: err.message,
+            errors: err.errors,
+            data: err.data,
+        });
+});
+
 export default app;

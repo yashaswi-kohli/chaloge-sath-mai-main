@@ -11,7 +11,7 @@ async function connectDB() : Promise<void>  {
         console.log("Database connected successfully: ", connection.connection.name);
     } 
     catch (error) {
-        console.log("MongoDB connection error: ", error);
+        console.log("MongoDB connection errordsfsd: ", error);
         process.exit(1);
     }
 }

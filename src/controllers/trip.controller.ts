@@ -9,8 +9,8 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { asyncHandler } from "../utils/AsyncHandler";
 import { cancelBooking } from "./booking.controller";
 import Conclusion from "../models/conclusion.model";
-import { sendBookingDetail } from "../email and sms/sendBookingDetail";
-import { sendTravellerCancelDetail } from "../email and sms/sendTravellerCancellingDetails";
+import { sendBookingDetail } from "../mails/sendBookingDetail";
+import { sendTravellerCancelDetail } from "../mails/sendTravellerCancellingDetails";
 
 export interface AuthenticatedRequest extends Request {
     user?: UserI;
@@ -275,7 +275,7 @@ export const getATrip = asyncHandler(async (req: Request, res: Response) => {
 })
 
 export const getAllTrips = asyncHandler(async (req: Request, res: Response) => {
-    let { from, to, date, seats, sortBy, sortType, prefrence, iBooking, timePeriod, maxTwoSeatsAtBack } = req.query;
+    let { from, to, date, seats, sortBy, sortType, prefrence, timePeriod, maxTwoSeatsAtBack } = req.query;
     if(!from && !to && !date && !seats) throw new ApiError(400, "All fields are required");
 
     try {
